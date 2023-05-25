@@ -11,7 +11,7 @@ pushd build
 
 del *.pdb > NUL 2> NUL
 
-set BASE_FILES=../shin.cpp 
+set BASE_FILES=../shin_win.cpp 
 
 set CFLAGS=/nologo /W3 /Z7 /GS- /Gs999999
 set LDFLAGS=/incremental:no /opt:icf /opt:ref /subsystem:windows
