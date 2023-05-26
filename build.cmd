@@ -1,6 +1,26 @@
 @echo off
 setlocal
 
+rem code statistics
+@echo.
+@echo -----------
+@echo.
+
+set Wildcard=*.h *.cpp *.inl *.c
+
+@echo TODOS FOUND:
+findstr -s -n -i -l "TODO" %Wildcard%
+
+@echo.
+
+@echo STATICS FOUND:
+findstr -s -n -i -l "static" %Wildcard%
+
+@echo.
+@echo -----------
+@echo.
+
+rem compilation
 where /q cl || (
   echo ERROR: "cl" not found - please run this from the MSVC x64 native tools command prompt.
   exit /b 1
@@ -13,7 +33,7 @@ del *.pdb > NUL 2> NUL
 
 set BASE_FILES=../shin_win.cpp 
 
-set CFLAGS=/nologo /W3 /Z7 /GS- /Gs999999
+set CFLAGS=/nologo /W3 /Z7 /GS- /Gs999999 /std:c++20
 set LDFLAGS=/incremental:no /opt:icf /opt:ref /subsystem:windows
 
 call cl -Od -Feshin_debug_msvc.exe %CFLAGS% %BASE_FILES% /link %LDFLAGS%

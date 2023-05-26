@@ -2,6 +2,8 @@ Buffer *buffer_create(u32 size) {
 	Buffer *buffer = (Buffer *) shin_alloc(sizeof(Buffer));
 
 	buffer->data = (char *) shin_alloc(size);
+	buffer->file_path = 0;
+	buffer->mode = MODE_NORMAL;
 	buffer->cursor = 0;
 	buffer->size = size;
 	buffer->gap_start = 0;
@@ -33,6 +35,10 @@ INLINE char buffer_get_char(Buffer *buffer, u32 cursor) {
 
 INLINE void buffer_set_char(Buffer *buffer, u32 cursor, char ch) {
 	buffer->data[buffer_data_index(buffer, cursor)] = ch;
+}
+
+INLINE void buffer_set_cursor(Buffer *buffer, u32 cursor) {
+	buffer->cursor = MIN(cursor, buffer_length(buffer));
 }
 
 void buffer_asserts(Buffer *buffer) {
@@ -94,7 +100,7 @@ void buffer_grow_if_needed(Buffer *buffer, u32 size_needed) {
 	if (buffer_gap_size(buffer) < size_needed) {
 		buffer_shift_gap_to_position(buffer, buffer_length(buffer));
 
-		u32 new_size = MAX(buffer->size * 2, buffer->size + size_needed);
+		u32 new_size = MAX(buffer->size * 2, buffer->size + size_needed - buffer_gap_size(buffer));
 
 		buffer->data = (char *) shin_realloc(buffer->data, new_size);
 		buffer->gap_end = new_size;
@@ -102,6 +108,12 @@ void buffer_grow_if_needed(Buffer *buffer, u32 size_needed) {
 	}
 
 	assert(buffer_gap_size(buffer) >= size_needed);
+}
+
+void buffer_clear(Buffer *buffer) {
+	buffer->gap_start = 0;	
+	buffer->gap_end = buffer->size;
+	buffer->cursor = 0;
 }
 
 void buffer_insert(Buffer *buffer, u32 pos, char ch) {
@@ -118,18 +130,15 @@ void buffer_insert(Buffer *buffer, u32 pos, char ch) {
 	}
 }
 
-bool buffer_replace(Buffer *buffer, u32 pos, char ch) {
+void buffer_replace(Buffer *buffer, u32 pos, char ch) {
 	buffer_asserts(buffer);
 
 	if (pos < buffer_length(buffer)) {
 		buffer_set_char(buffer, pos, ch);
-		return true;
 	}
-
-	return false;
 }
 
-bool buffer_delete_forwards(Buffer *buffer, u32 pos) {
+void buffer_delete_forwards(Buffer *buffer, u32 pos) {
 	buffer_asserts(buffer);
 
 	if (pos < buffer_length(buffer)) {
@@ -139,13 +148,10 @@ bool buffer_delete_forwards(Buffer *buffer, u32 pos) {
 		if (buffer->cursor > pos) {
 			buffer->cursor--;
 		}
-		return true;
 	}
-
-	return false;
 }
 
-bool buffer_delete_backwards(Buffer *buffer, u32 pos) {
+void buffer_delete_backwards(Buffer *buffer, u32 pos) {
 	buffer_asserts(buffer);
 
 	if (pos > 0) {
@@ -154,10 +160,7 @@ bool buffer_delete_backwards(Buffer *buffer, u32 pos) {
 		if (buffer->cursor >= pos) {
 			buffer->cursor--;
 		}
-		return true;
 	}
-
-	return false;
 }
 
 u32 cursor_next(Buffer *buffer, u32 cursor) {
@@ -210,4 +213,100 @@ u32 cursor_get_end_of_line(Buffer *buffer, u32 cursor) {
 	}
 
 	return buffer_length(buffer);
+}
+
+INLINE u32 cursor_get_beginning_of_next_line(Buffer *buffer, u32 cursor) {
+	return cursor_next(buffer, cursor_get_end_of_line(buffer, cursor));
+}
+
+INLINE u32 cursor_get_beginning_of_prev_line(Buffer *buffer, u32 cursor) {
+	return cursor_get_beginning_of_line(buffer, cursor_back(buffer, cursor_get_beginning_of_line(buffer, cursor)));
+}
+
+INLINE u32 cursor_get_end_of_prev_line(Buffer *buffer, u32 cursor) {
+	return cursor_back(buffer, cursor_get_beginning_of_line(buffer, cursor));
+}
+
+INLINE u32 cursor_get_end_of_next_line(Buffer *buffer, u32 cursor) {
+	return cursor_get_end_of_line(buffer, cursor_get_beginning_of_next_line(buffer, cursor));
+}
+
+INLINE u32 buffer_line_length(Buffer *buffer, u32 cursor) {
+	return cursor_get_end_of_line(buffer, cursor) - cursor_get_beginning_of_line(buffer, cursor);
+}
+
+INLINE u32 cursor_get_column(Buffer *buffer, u32 cursor) {
+	return cursor - cursor_get_beginning_of_line(buffer, cursor);
+}
+
+void pane_create(Bounds bounds, Buffer *buffer) {
+	Pane *pane = &panes[pane_count];
+
+	pane->bounds = bounds;
+	pane->buffer = buffer;
+	pane->start = 0;
+	pane->end = UINT32_MAX;
+	pane->showable_lines = 5;
+
+	active_pane = pane_count;
+	pane_count++;
+}
+
+void pane_destroy(Pane *pane) {
+	panes[pane - panes] = pane[pane_count - 1];
+	pane_count--;
+}
+
+void pane_set_active(u32 pane) {
+	current_buffer = panes[pane].buffer;
+	active_pane = pane;
+}
+
+u32 get_line_difference(Buffer *buffer, u32 start, u32 end) {
+	u32 lines = 0;
+	
+	while (end > start) {
+		if (buffer_get_char(buffer, end) == '\n') {
+			lines++;
+		}
+		end = cursor_back(buffer, end);
+	}
+
+	return lines;
+}
+
+void pane_update_scroll(Pane *pane) {
+	Buffer *buffer = pane->buffer;
+	u32 start = MIN(buffer_length(buffer), pane->start);
+	u32 end = MIN(buffer_length(buffer), pane->end);
+
+	if (buffer->cursor < start) {
+		while (start > buffer->cursor) {
+			start = cursor_get_beginning_of_prev_line(buffer, start);
+		}
+
+		u32 line_diff = get_line_difference(buffer, start, end);
+		while (line_diff > pane->showable_lines) {
+			end = cursor_get_end_of_prev_line(buffer, end);
+			line_diff--;
+		}
+	}
+
+	if (buffer->cursor > end) {
+		while (end < buffer->cursor) {
+			end = cursor_get_end_of_next_line(buffer, end);
+		}
+
+		u32 line_diff = get_line_difference(buffer, start, end);
+		if (end == buffer->size) {
+			line_diff++;
+		}
+		while (line_diff > pane->showable_lines) {
+			start = cursor_get_beginning_of_next_line(buffer, start);
+			line_diff--;
+		}
+	}
+
+	pane->start = start;
+	pane->end = end;
 }

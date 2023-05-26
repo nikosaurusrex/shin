@@ -1,6 +1,7 @@
 #include <assert.h>
 #include <stdint.h>
 
+#define MIN(a,b) (a < b ? a : b)
 #define MAX(a,b) (a > b ? a : b)
 
 #ifdef _MSC_VER
@@ -22,8 +23,15 @@ typedef double f64;
 
 typedef void (*CommandFunction)();
 
+enum Mode {
+	MODE_INSERT,
+	MODE_NORMAL
+};
+
 struct Buffer {
+	Mode mode;
 	char *data;
+	char *file_path;
 	u32 cursor;
 	u32 size;
 	u32 gap_start;
@@ -31,7 +39,8 @@ struct Buffer {
 };
 
 enum {
-	MAX_KEY_COMBINATIONS = 1 << (8 + 3)
+	MAX_PANES = 16,
+	MAX_KEY_COMBINATIONS = 1 << (8 + 3),
 };
 
 enum InputEventType {
@@ -54,7 +63,27 @@ struct InputEvent {
 	char ch;
 };
 
+struct Bounds {
+	u32 left;
+	u32 right;
+	u32 top;
+	u32 bottom;
+};
+
+struct Pane {
+	Bounds bounds;
+	Buffer *buffer;
+	u32 start;
+	u32 end;
+	u32 showable_lines;
+};
+
 /* TODO: Clean up globals */
-Buffer *current_buffer;
-Keymap *current_keymap;
-InputEvent last_input_event;
+static Buffer *current_buffer;
+static Keymap *insert_keymap;
+static Keymap *normal_keymap;
+static InputEvent last_input_event;
+
+static Pane panes[MAX_PANES];
+static u32 pane_count;
+static u32 active_pane;
