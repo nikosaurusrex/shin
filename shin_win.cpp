@@ -3,6 +3,8 @@
 #include "shin.cpp"
 #include "commands.cpp"
 
+#include <math.h>
+
 #include <Windows.h>
 #include <d2d1.h>
 #include <dwrite.h>
@@ -149,6 +151,44 @@ void create_default_keymaps() {
 	normal_keymap = keymap;
 }
 
+HRESULT change_font(const wchar_t *font_name, u32 font_height) {
+	HRESULT result =  dwrite_factory->CreateTextFormat(
+		font_name,
+		0,
+		DWRITE_FONT_WEIGHT_REGULAR,
+		DWRITE_FONT_STYLE_NORMAL,
+		DWRITE_FONT_STRETCH_NORMAL,
+		(f32) font_height,
+		L"en-us",
+		&text_format
+	);
+
+	text_format->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
+
+	return result;
+}
+
+void adjust_panes_to_font() {
+	IDWriteTextLayout *text_layout;
+	dwrite_factory->CreateTextLayout(
+		L"Mg", 2,
+		text_format,
+		200,
+		200,
+		&text_layout
+	);
+
+	DWRITE_TEXT_METRICS metrics = {0};
+	text_layout->GetMetrics(&metrics);
+
+	for (u32 i = 0; i < pane_count; ++i) {
+		Bounds bounds = panes[i].bounds;
+		f32 height = (f32) (bounds.bottom - bounds.top);
+		panes[i].showable_lines = (u32) floorf(height / metrics.height);
+	}
+}
+
+
 void pane_draw(Pane *pane) {
 	Buffer *buffer = pane->buffer;
 
@@ -228,7 +268,7 @@ void pane_draw(Pane *pane) {
 		}
 	}
 
-	// pane->end = cursor_get_end_of_line(buffer, pos);
+	pane->end = cursor_get_end_of_line(buffer, pos);
 	render_target->PopAxisAlignedClip();
 }
 
@@ -302,6 +342,8 @@ LRESULT CALLBACK ShinWindowProc(HWND window, UINT message_type, WPARAM wparam, L
 			&text_brush
 		);
 
+		adjust_panes_to_font();
+
 		ValidateRect(window, 0);
 		window_render(window);
 	} break;
@@ -370,18 +412,8 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE, LPSTR, int cmd_show) {
 	HRESULT hresult = 0;
 	hresult = D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &d2d_factory);
 	hresult = DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory), (IUnknown **)&dwrite_factory);
-	hresult = dwrite_factory->CreateTextFormat(
-		L"Consolas",
-		0,
-		DWRITE_FONT_WEIGHT_REGULAR,
-		DWRITE_FONT_STYLE_NORMAL,
-		DWRITE_FONT_STRETCH_NORMAL,
-		30.0f,
-		L"en-us",
-		&text_format
-	);
 
-	text_format->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
+	hresult = change_font(L"Consolas", 30);
 
 	WNDCLASSA window_class = { 0 };
 	window_class.style = CS_HREDRAW | CS_VREDRAW;

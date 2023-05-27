@@ -272,6 +272,10 @@ u32 get_line_difference(Buffer *buffer, u32 start, u32 end) {
 		end = cursor_back(buffer, end);
 	}
 
+	if (cursor_get_end_of_line(buffer, buffer->cursor) == buffer_length(buffer)) {
+		lines++;
+	}
+
 	return lines;
 }
 
@@ -298,9 +302,6 @@ void pane_update_scroll(Pane *pane) {
 		}
 
 		u32 line_diff = get_line_difference(buffer, start, end);
-		if (end == buffer->size) {
-			line_diff++;
-		}
 		while (line_diff > pane->showable_lines) {
 			start = cursor_get_beginning_of_next_line(buffer, start);
 			line_diff--;

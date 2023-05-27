@@ -141,7 +141,6 @@ Keymap *keymap_create_empty() {
 void keymap_dispatch_event(Keymap *keymap, InputEvent event) {
 	if (event.type == INPUT_EVENT_PRESSED) {
 		Command *command = keymap_get_command(keymap, event.key_comb);
-		shin_printf("Key: '%x', Ch: '%c', Command: %s\n", event.key_comb, event.ch, command->name);
 		command->function();
 	}
 }
