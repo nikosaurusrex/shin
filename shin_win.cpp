@@ -8,6 +8,7 @@
 #include <Windows.h>
 #include <d2d1.h>
 #include <dwrite.h>
+#include <Strsafe.h>
 
 #pragma comment(lib, "user32.lib")
 #pragma comment(lib, "d2d1.lib")
@@ -18,6 +19,7 @@ static IDWriteFactory *dwrite_factory;
 static ID2D1HwndRenderTarget *render_target;
 static IDWriteTextFormat *text_format;
 static ID2D1SolidColorBrush *text_brush;
+static ID2D1SolidColorBrush *cursor_brush;
 
 void *shin_alloc(u32 size) {
 	return HeapAlloc(GetProcessHeap(), 0, size);
@@ -86,7 +88,7 @@ void shin_printf(const char *fmt, ...) {
 	char temp[1024];
 	va_list arg_list;
 	va_start(arg_list, fmt);
-	wvsprintfA(temp, fmt, arg_list);
+	StringCbVPrintfA(temp, sizeof(temp), fmt, arg_list);
 	va_end(arg_list);
 	OutputDebugStringA(temp);
 }
@@ -209,12 +211,13 @@ void pane_draw(Pane *pane) {
 	if (pane == &panes[active_pane]) {
 		render_target->DrawRectangle(layout_rect, text_brush, border);
 	}
+
 	layout_rect.left += border;
 	layout_rect.right -= border;
 	layout_rect.top += border;
 	layout_rect.bottom -= border;
 
-	render_target->PushAxisAlignedClip(layout_rect, D2D1_ANTIALIAS_MODE_ALIASED);
+	render_target->PushAxisAlignedClip(layout_rect, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
 
 	u32 lines_drawn = 0;
 	u32 pos;
@@ -235,12 +238,6 @@ void pane_draw(Pane *pane) {
 			&text_layout
 		);
 
-		render_target->DrawTextLayout(D2D1::Point2F(layout_rect.left, layout_rect.top), text_layout, text_brush);
-
-		DWRITE_LINE_METRICS line_metrics;
-		UINT32 line_count;
-		text_layout->GetLineMetrics(&line_metrics, 1, &line_count);
-
 		if (pane == &panes[active_pane] && prev_pos <= buffer->cursor && buffer->cursor <= pos) {
 			DWRITE_HIT_TEST_METRICS caret_metrics;
 			f32 caret_x, caret_y;
@@ -248,13 +245,29 @@ void pane_draw(Pane *pane) {
 			text_layout->HitTestTextPosition(buffer->cursor - prev_pos, 0, &caret_x, &caret_y, &caret_metrics);
 
 			D2D1_RECT_F caret_rect;
+			if (caret_metrics.left == 0) {
+				caret_metrics.left = 1;	
+			}
 			caret_rect.left = layout_rect.left + caret_metrics.left;
-			caret_rect.right = caret_rect.left;
+
 			caret_rect.top = layout_rect.top + caret_metrics.top;
 			caret_rect.bottom = layout_rect.top + caret_metrics.height;
 
-			render_target->DrawRectangle(caret_rect, text_brush);
+
+			if (current_buffer->mode == MODE_NORMAL) {
+				caret_rect.right = caret_rect.left + caret_metrics.width;
+				render_target->FillRectangle(caret_rect, cursor_brush);
+			} else {
+				caret_rect.right = caret_rect.left;
+			 	render_target->DrawRectangle(caret_rect, cursor_brush);
+			}
 		}
+
+		render_target->DrawTextLayout(D2D1::Point2F(layout_rect.left, layout_rect.top), text_layout, text_brush);
+
+		DWRITE_LINE_METRICS line_metrics;
+		UINT32 line_count;
+		text_layout->GetLineMetrics(&line_metrics, 1, &line_count);
 
 		if (line_count == 1) {
 			layout_rect.top += line_metrics.height;
@@ -284,29 +297,6 @@ void window_render(HWND window) {
 		pane_draw(&panes[i]);
 	}
 
-	D2D1_RECT_F layout_rect;
-	layout_rect.left = (f32) client_rectangle.left;
-	layout_rect.right = (f32) client_rectangle.right;
-	/* TODO: change to be font size dependent */
-	layout_rect.top = (f32) (client_rectangle.bottom - 35);
-	layout_rect.bottom = (f32) client_rectangle.bottom;
-
-	WCHAR mode_text_comb[64] = L"Normal\0Insert";
-	WCHAR *mode_text;
-	if (current_buffer->mode == MODE_NORMAL) {
-		mode_text = mode_text_comb;
-	} else {
-		mode_text = mode_text_comb + 7;
-	}
-
-	render_target->DrawText(
-		mode_text,
-		(u32) wcslen(mode_text),
-		text_format,
-		layout_rect,
-		text_brush
-	);
-
 	render_target->EndDraw();
 }
 
@@ -323,6 +313,12 @@ LRESULT CALLBACK ShinWindowProc(HWND window, UINT message_type, WPARAM wparam, L
 		window_size.width = client_rectangle.right - client_rectangle.left;
 		window_size.height = client_rectangle.bottom - client_rectangle.top;
 
+		Pane *ap = &panes[active_pane];
+		ap->bounds.left = client_rectangle.left;
+		ap->bounds.right = client_rectangle.right;
+		ap->bounds.top = client_rectangle.top;
+		ap->bounds.bottom = client_rectangle.bottom;
+
 		if (render_target) {
 			render_target->Release();
 		}
@@ -337,9 +333,18 @@ LRESULT CALLBACK ShinWindowProc(HWND window, UINT message_type, WPARAM wparam, L
 			text_brush->Release();
 		}
 
+		if (cursor_brush) {
+			cursor_brush->Release();
+		}
+
 		hresult = render_target->CreateSolidColorBrush(
 			D2D1::ColorF(D2D1::ColorF::White),
 			&text_brush
+		);
+
+		hresult = render_target->CreateSolidColorBrush(
+			D2D1::ColorF(D2D1::ColorF::Pink),
+			&cursor_brush
 		);
 
 		adjust_panes_to_font();
@@ -405,15 +410,11 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE, LPSTR, int cmd_show) {
 
 	pane_create({0, 500, 0, 500}, current_buffer);
 
-	current_buffer = buffer_create(32);
-	current_buffer->file_path = (char *) "test2.txt";
-	pane_create({600, 1100, 0, 500}, current_buffer);
-
 	HRESULT hresult = 0;
 	hresult = D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &d2d_factory);
 	hresult = DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory), (IUnknown **)&dwrite_factory);
 
-	hresult = change_font(L"Consolas", 30);
+	hresult = change_font(L"Cascadia Code", 20);
 
 	WNDCLASSA window_class = { 0 };
 	window_class.style = CS_HREDRAW | CS_VREDRAW;
