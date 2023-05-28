@@ -28,7 +28,7 @@ del *.pdb > NUL 2> NUL
 set BASE_FILES=../shin.cpp 
 
 set CFLAGS=-I../extern/include -std=c++20 -nostdlib++ -mno-stack-arg-probe -maes -fuse-ld=lld -D_CRT_SECURE_NO_WARNINGS
-set LDFLAGS=-l../extern/libs/freetype/freetype_static -l../extern/libs/glfw/glfw3_mt -l../extern/libs/glew/glew32s -l../extern/libs/OpenGL32
+set LDFLAGS=-l../extern/libs/freetype/freetype_static -l../extern/libs/glfw/glfw3_mt -l../extern/libs/glew/glew32s -l../extern/libs/OpenGL32 -luser32 -lgdi32 -lshell32
 
 where /q clang || (
   echo WARNING: "clang" not found - to run the fastest version of refterm, please install CLANG.
