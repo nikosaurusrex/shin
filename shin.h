@@ -1,5 +1,9 @@
 #include <assert.h>
+#include <math.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #define MIN(a,b) (a < b ? a : b)
 #define MAX(a,b) (a > b ? a : b)
@@ -77,6 +81,10 @@ struct Pane {
 	u32 end;
 	u32 showable_lines;
 };
+
+void read_file_to_buffer(Buffer *buffer);
+void write_buffer_to_file(Buffer *buffer);
+void shin_exit();
 
 /* TODO: Clean up globals */
 static Buffer *current_buffer;

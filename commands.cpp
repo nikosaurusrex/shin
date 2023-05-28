@@ -64,11 +64,11 @@ COMMAND(goto_end_of_line) {
 }
 
 COMMAND(reload_buffer) {
-	shin_read_file_to_buffer(current_buffer);
+	read_file_to_buffer(current_buffer);
 }
 
 COMMAND(save_buffer) {
-	shin_write_buffer_to_file(current_buffer);
+	write_buffer_to_file(current_buffer);
 }
 
 COMMAND(insert_mode) {
@@ -129,7 +129,7 @@ Command *keymap_get_command(Keymap *keymap, u16 key_comb) {
 }
 
 Keymap *keymap_create_empty() {
-	Keymap *keymap = (Keymap *) shin_alloc(sizeof(Keymap));
+	Keymap *keymap = (Keymap *) malloc(sizeof(Keymap));
 
 	for (u32 i = 0; i < MAX_KEY_COMBINATIONS; ++i) {
 		keymap->commands[i] = command_null;

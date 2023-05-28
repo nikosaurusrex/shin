@@ -1,313 +1,321 @@
-Buffer *buffer_create(u32 size) {
-	Buffer *buffer = (Buffer *) shin_alloc(sizeof(Buffer));
+#include "shin.h"
+#include "buffer.cpp"
+#include "commands.cpp"
 
-	buffer->data = (char *) shin_alloc(size);
-	buffer->file_path = 0;
-	buffer->mode = MODE_NORMAL;
-	buffer->cursor = 0;
-	buffer->size = size;
-	buffer->gap_start = 0;
-	buffer->gap_end = size;
+#define GLEW_STATIC
+#include <glew/glew.h>
+#include <glfw/glfw3.h>
+#include <freetype/freetype.h>
 
-	return buffer;
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "stb_image_write.h"
+
+struct FontMetrics {
+	s32 descender;
+	s32 glyph_width;
+	s32 glyph_height;
+}; 
+
+struct GlyphMap {
+	FontMetrics metrics;
+	u8 *data;
+	u32 width;
+	u32 height;
+};
+
+void read_file_to_buffer(Buffer *buffer) {
+	FILE *file = fopen(buffer->file_path, "rb");
+	if (!file) return;
+
+	fseek(file, 0, SEEK_END);
+	u64 file_size = ftell(file);
+	fseek(file, 0, SEEK_SET);
+
+	buffer_clear(buffer);
+	buffer_grow_if_needed(buffer, file_size);
+
+	u64 size_read = fread(buffer->data, 1, file_size, file);
+
+	fclose(file);
+
+	buffer->gap_start = size_read;
 }
 
-void buffer_destroy(Buffer *buffer) {
-	shin_free(buffer->data);
-	shin_free(buffer);
+void write_buffer_to_file(Buffer *buffer) {
+	FILE *file = fopen(buffer->file_path, "w");
+
+	if (!file) return;
+
+	fwrite(buffer->data, 1, buffer->gap_start, file);
+	fwrite(buffer->data + buffer->gap_end, 1, buffer->size - buffer->gap_end, file);
+
+	fclose(file);
 }
 
-INLINE u32 buffer_gap_size(Buffer *buffer) {
-	return buffer->gap_end - buffer->gap_start;
+void shin_exit() {
+	/* TODO: exit */
+	// PostQuitMessage(0);
 }
 
-INLINE u32 buffer_length(Buffer *buffer) {
-	return buffer->size - buffer_gap_size(buffer);
+void create_default_keymaps() {
+	// insert keymap
+	Keymap *keymap = keymap_create_empty();
+
+	for (u32 key = 0; key < 256; ++key) {
+		/* TODO: rework */
+		// char ch = shin_map_virtual_key(key);
+		char ch = key;
+		if (' ' <= ch && ch <= '~') {
+			keymap->commands[key] = command_insert_char;
+			keymap->commands[key | SHIFT] = command_insert_char;
+		}
+	}
+	/* TODO: Change keybinds */
+#if 0
+	keymap->commands[VK_RETURN]		= command_insert_new_line;
+	keymap->commands[VK_DELETE]		= command_delete_forwards;
+	keymap->commands[VK_BACK]  		= command_delete_backwards;
+	keymap->commands[VK_LEFT]  		= command_cursor_back;
+	keymap->commands[VK_RIGHT] 		= command_cursor_next;
+	keymap->commands[VK_F4 | ALT]    = command_quit;
+	keymap->commands['S' | CTRL]     = command_save_buffer;
+	keymap->commands['R' | CTRL]     = command_reload_buffer;
+	keymap->commands[VK_ESCAPE]     = command_normal_mode;
+
+	insert_keymap = keymap;
+
+	// normal keymap
+	keymap = keymap_create_empty();
+	keymap->commands['X'] = command_delete_forwards;
+	keymap->commands['H'] = command_cursor_back;
+	keymap->commands['L'] = command_cursor_next;
+	keymap->commands['J'] = command_next_line;
+	keymap->commands['K'] = command_prev_line;
+	keymap->commands['I' | SHIFT] = command_goto_beginning_of_line;
+	keymap->commands['A' | SHIFT] = command_goto_end_of_line;
+	keymap->commands[VK_F4 | ALT] = command_quit;
+	keymap->commands['S' | CTRL] = command_save_buffer;
+	keymap->commands['R' | CTRL] = command_reload_buffer;
+	keymap->commands['I'] = command_insert_mode;
+	keymap->commands['A'] = command_insert_mode_next;
+	keymap->commands['O'] = command_new_line_after;
+	keymap->commands['O' | SHIFT] = command_new_line_before;
+	// TODO: fix wrong binding
+	keymap->commands['G'] = command_goto_buffer_begin;
+	keymap->commands['G' | SHIFT] = command_goto_buffer_end;
+	keymap->commands['H' | CTRL] = command_prev_pane;
+	keymap->commands['L' | CTRL] = command_next_pane;
+
+	normal_keymap = keymap;
+#endif
 }
 
-INLINE u32 buffer_data_index(Buffer *buffer, u32 cursor) {
-	return (cursor < buffer->gap_start) ? cursor : (cursor + buffer_gap_size(buffer));
+#if 0
+void adjust_panes_to_font() {
+	IDWriteTextLayout *text_layout;
+	dwrite_factory->CreateTextLayout(
+		L"Mg", 2,
+		text_format,
+		200,
+		200,
+		&text_layout
+	);
+
+	DWRITE_TEXT_METRICS metrics = {0};
+	text_layout->GetMetrics(&metrics);
+
+	for (u32 i = 0; i < pane_count; ++i) {
+		Bounds bounds = panes[i].bounds;
+		f32 height = (f32) (bounds.bottom - bounds.top);
+		panes[i].showable_lines = (u32) floorf(height / metrics.height);
+	}
 }
 
-INLINE char buffer_get_char(Buffer *buffer, u32 cursor) {
-	return buffer->data[buffer_data_index(buffer, cursor)];
-}
+void pane_draw(Pane *pane) {
+	Buffer *buffer = pane->buffer;
 
-INLINE void buffer_set_char(Buffer *buffer, u32 cursor, char ch) {
-	buffer->data[buffer_data_index(buffer, cursor)] = ch;
-}
+	pane_update_scroll(pane);
 
-INLINE void buffer_set_cursor(Buffer *buffer, u32 cursor) {
-	buffer->cursor = MIN(cursor, buffer_length(buffer));
-}
+	const f32 border = 2.0f;
+	char utf8[64];
+	WCHAR utf16[64];
 
-void buffer_asserts(Buffer *buffer) {
-	assert(buffer->data);
-	assert(buffer->gap_start <= buffer->gap_end);
-	assert(buffer->gap_end <= buffer->size);
-	assert(buffer->cursor <= buffer_length(buffer));
-}
+	u32 start = pane->start;
 
-u32 buffer_move_position_forward(Buffer *buffer, u32 pos) {
-	assert(pos != buffer->size);
+	D2D1_RECT_F layout_rect;
+	layout_rect.left = (f32) pane->bounds.left;
+	layout_rect.right = (f32) pane->bounds.right;
+	layout_rect.top = (f32) pane->bounds.top;
+	layout_rect.bottom = (f32) pane->bounds.bottom;
 
-	pos++;
-	if (pos == buffer->gap_start) {
-		pos = buffer->gap_end;
+	if (pane == &panes[active_pane]) {
+		render_target->DrawRectangle(layout_rect, text_brush, border);
 	}
 
-	return pos;
-}
+	layout_rect.left += border;
+	layout_rect.right -= border;
+	layout_rect.top += border;
+	layout_rect.bottom -= border;
 
-u32 buffer_get_line(Buffer *buffer, char *line, u32 line_size, u32 *cursor) {
-	u32 local_cursor = *cursor;
+	render_target->PushAxisAlignedClip(layout_rect, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
 
-	u32 i;
-	for (i = 0; i < line_size && local_cursor < buffer_length(buffer); ++i) {
-		char ch = buffer_get_char(buffer, local_cursor);
-		if (ch == '\n') {
+	u32 lines_drawn = 0;
+	u32 pos;
+	for (pos = start; pos < buffer_length(buffer) && layout_rect.top < layout_rect.bottom; pos = cursor_next(buffer, pos)) {
+		u32 prev_pos = pos;
+
+		u32 utf8_length = buffer_get_line(buffer, utf8, sizeof(utf8) - 1, &pos);
+		utf8[utf8_length] = 0;
+
+		u32 utf16_length = MultiByteToWideChar(CP_UTF8, 0, utf8, utf8_length, utf16, sizeof(utf16) / sizeof(*utf16));
+
+		IDWriteTextLayout *text_layout;
+		dwrite_factory->CreateTextLayout(
+			utf16, utf16_length,
+			text_format,
+			layout_rect.right - layout_rect.left,
+			layout_rect.bottom - layout_rect.top,
+			&text_layout
+		);
+
+		if (pane == &panes[active_pane] && prev_pos <= buffer->cursor && buffer->cursor <= pos) {
+			DWRITE_HIT_TEST_METRICS caret_metrics;
+			f32 caret_x, caret_y;
+
+			text_layout->HitTestTextPosition(buffer->cursor - prev_pos, 0, &caret_x, &caret_y, &caret_metrics);
+
+			D2D1_RECT_F caret_rect;
+			if (caret_metrics.left == 0) {
+				caret_metrics.left = 1;	
+			}
+			caret_rect.left = layout_rect.left + caret_metrics.left;
+
+			caret_rect.top = layout_rect.top + caret_metrics.top;
+			caret_rect.bottom = layout_rect.top + caret_metrics.height;
+
+
+			if (current_buffer->mode == MODE_NORMAL) {
+				caret_rect.right = caret_rect.left + caret_metrics.width;
+				render_target->FillRectangle(caret_rect, cursor_brush);
+			} else {
+				caret_rect.right = caret_rect.left;
+			 	render_target->DrawRectangle(caret_rect, cursor_brush);
+			}
+		}
+
+		render_target->DrawTextLayout(D2D1::Point2F(layout_rect.left, layout_rect.top), text_layout, text_brush);
+
+		DWRITE_LINE_METRICS line_metrics;
+		UINT32 line_count;
+		text_layout->GetLineMetrics(&line_metrics, 1, &line_count);
+
+		if (line_count == 1) {
+			layout_rect.top += line_metrics.height;
+			lines_drawn++;
+		}
+
+		text_layout->Release();
+
+		if (lines_drawn >= pane->showable_lines) {
 			break;
 		}
-
-		line[i] = ch;
-		local_cursor++;
 	}
 
-	while (local_cursor < buffer_length(buffer) && buffer_get_char(buffer, local_cursor) != '\n') {
-		local_cursor++;
+	pane->end = cursor_get_end_of_line(buffer, pos);
+	render_target->PopAxisAlignedClip();
+}
+
+void window_render(HWND window) {
+	RECT client_rectangle;
+	GetClientRect(window, &client_rectangle);
+
+	render_target->BeginDraw();
+	render_target->Clear(D2D1::ColorF(D2D1::ColorF::Black));
+
+	/* TODO: maybe in the future, dont redraw every pane? */
+	for (u32 i = 0; i < pane_count; ++i) {
+		pane_draw(&panes[i]);
 	}
 
-	*cursor = local_cursor;
-	return i;
+	render_target->EndDraw();
+}
+#endif
+
+FontMetrics font_metrics_get(FT_Face face) {
+	FontMetrics metrics = {0};
+
+	FT_Load_Char(face, 'M', FT_RENDER_MODE_NORMAL);
+	metrics.descender = -face->size->metrics.descender >> 6;
+	metrics.glyph_width = face->glyph->advance.x >> 6;
+	metrics.glyph_height = (face->size->metrics.ascender >> 6) + metrics.descender;
+
+	return metrics;
 }
 
-void buffer_shift_gap_to_position(Buffer *buffer, u32 pos) {
-	if (pos < buffer->gap_start) {
-		u32 gap_delta = buffer->gap_start - pos;
-		buffer->gap_start -= gap_delta;
-		buffer->gap_end -= gap_delta;
-		shin_memmove(buffer->data + buffer->gap_end, buffer->data + buffer->gap_start, gap_delta);
-	} else if (pos > buffer->gap_start) {
-		u32 gap_delta = pos - buffer->gap_start;
-		shin_memmove(buffer->data + buffer->gap_start, buffer->data + buffer->gap_end, gap_delta);
-		buffer->gap_start += gap_delta;
-		buffer->gap_end += gap_delta;
-	}
-	buffer_asserts(buffer);
-}
+#define GLYPH_MAP_COUNT_X 32
+#define GLYPH_MAP_COUNT_Y 16
+GlyphMap *glyph_map_create(FT_Library ft, const char *font, u32 pixel_size) {
+	FT_Face face;
+	FT_New_Face(ft, font, 0, &face);
+	FT_Set_Pixel_Sizes(face, 0, pixel_size);
 
-void buffer_grow_if_needed(Buffer *buffer, u32 size_needed) {
-	if (buffer_gap_size(buffer) < size_needed) {
-		buffer_shift_gap_to_position(buffer, buffer_length(buffer));
+	FontMetrics metrics = font_metrics_get(face);
 
-		u32 new_size = MAX(buffer->size * 2, buffer->size + size_needed - buffer_gap_size(buffer));
+	GlyphMap *map = (GlyphMap *) malloc(sizeof(GlyphMap));
 
-		buffer->data = (char *) shin_realloc(buffer->data, new_size);
-		buffer->gap_end = new_size;
-		buffer->size = new_size;
-	}
+	map->metrics = metrics;
+	map->width = metrics.glyph_width * GLYPH_MAP_COUNT_X;
+	map->height = metrics.glyph_height * GLYPH_MAP_COUNT_Y;
 
-	assert(buffer_gap_size(buffer) >= size_needed);
-}
+	map->data = (u8 *) malloc(map->width * map->height);
+	memset(map->data, 0, map->width * map->height);
 
-void buffer_clear(Buffer *buffer) {
-	buffer->gap_start = 0;	
-	buffer->gap_end = buffer->size;
-	buffer->cursor = 0;
-}
+	u32 chars_count = '~' - ' ';
 
-void buffer_insert(Buffer *buffer, u32 pos, char ch) {
-	buffer_asserts(buffer);
+	for (u32 i = 0; i < chars_count; ++i) {
+		u32 code = ' ' + i;
+		FT_UInt glyph_index = FT_Get_Char_Index(face, code);
+		FT_GlyphSlot glyph = face->glyph;
 
-	buffer_grow_if_needed(buffer, 64);
-	buffer_shift_gap_to_position(buffer, pos);
+		FT_Load_Glyph(face, glyph_index, FT_LOAD_RENDER);
+		FT_Render_Glyph(glyph, FT_RENDER_MODE_NORMAL);
 
-	buffer->data[buffer->gap_start] = ch;
-	buffer->gap_start++;
+		FT_Bitmap bitmap = glyph->bitmap;
+		s32 left = glyph->bitmap_left;
+		s32 top = (metrics.glyph_height - metrics.descender) - glyph->bitmap_top;
 
-	if (buffer->cursor >= pos) {
-		buffer->cursor++;
-	}
-}
+		if (top < 0) {
+			top = 0;
+		}
 
-void buffer_replace(Buffer *buffer, u32 pos, char ch) {
-	buffer_asserts(buffer);
+		s32 tile_x = i % GLYPH_MAP_COUNT_X;
+		s32 tile_y = i / GLYPH_MAP_COUNT_X;
 
-	if (pos < buffer_length(buffer)) {
-		buffer_set_char(buffer, pos, ch);
-	}
-}
+		s32 start_x = tile_x * metrics.glyph_width + left;
+		s32 start_y = tile_y * metrics.glyph_height + top;
 
-void buffer_delete_forwards(Buffer *buffer, u32 pos) {
-	buffer_asserts(buffer);
+		for (s32 pixel_y = 0; pixel_y < bitmap.rows; ++pixel_y) {
+			for (s32 pixel_x = 0; pixel_x < bitmap.width; ++pixel_x) {
+				u8 color = bitmap.buffer[pixel_x + pixel_y * bitmap.width];
 
-	if (pos < buffer_length(buffer)) {
-		buffer_shift_gap_to_position(buffer, pos);
-		buffer->gap_end++;
+				s32 x = start_x + pixel_x;
+				s32 y = start_y + pixel_y;
 
-		if (buffer->cursor > pos) {
-			buffer->cursor--;
+				map->data[x + y * map->width] = color;
+			}
 		}
 	}
+
+	return map;
 }
 
-void buffer_delete_backwards(Buffer *buffer, u32 pos) {
-	buffer_asserts(buffer);
+int main() {
+	FT_Library ft;
+	FT_Init_FreeType(&ft);
 
-	if (pos > 0) {
-		buffer_shift_gap_to_position(buffer, pos);
-		buffer->gap_start--;
-		if (buffer->cursor >= pos) {
-			buffer->cursor--;
-		}
-	}
-}
+	GlyphMap *map = glyph_map_create(ft, "Consolas.ttf", 22);
 
-u32 cursor_next(Buffer *buffer, u32 cursor) {
-	buffer_asserts(buffer);
-
-	if (cursor < buffer_length(buffer)) {
-		cursor++;
-	}
-
-	return cursor;
-}
-
-u32 cursor_back(Buffer *buffer, u32 cursor) {
-	buffer_asserts(buffer);
-
-	if (cursor > 0) {
-		cursor--;
-	}
-
-	return cursor;
-}
-
-u32 cursor_get_beginning_of_line(Buffer *buffer, u32 cursor) {
-	buffer_asserts(buffer);
-
-	cursor = cursor_back(buffer, cursor);
-
-	while (cursor > 0) {
-		char ch = buffer_get_char(buffer, cursor);
-		if (ch == '\n') {
-			return cursor_next(buffer, cursor);
-		}
-		
-		cursor = cursor_back(buffer, cursor);
-	}
+	stbi_write_png("out.png", map->width, map->height, 1, map->data, map->width);
 
 	return 0;
-}
-
-u32 cursor_get_end_of_line(Buffer *buffer, u32 cursor) {
-	buffer_asserts(buffer);
-
-	while (cursor < buffer_length(buffer)) {
-		char ch = buffer_get_char(buffer, cursor);
-		if (ch == '\n') {
-			return cursor;
-		}
-		
-		cursor = cursor_next(buffer, cursor);
-	}
-
-	return buffer_length(buffer);
-}
-
-INLINE u32 cursor_get_beginning_of_next_line(Buffer *buffer, u32 cursor) {
-	return cursor_next(buffer, cursor_get_end_of_line(buffer, cursor));
-}
-
-INLINE u32 cursor_get_beginning_of_prev_line(Buffer *buffer, u32 cursor) {
-	return cursor_get_beginning_of_line(buffer, cursor_back(buffer, cursor_get_beginning_of_line(buffer, cursor)));
-}
-
-INLINE u32 cursor_get_end_of_prev_line(Buffer *buffer, u32 cursor) {
-	return cursor_back(buffer, cursor_get_beginning_of_line(buffer, cursor));
-}
-
-INLINE u32 cursor_get_end_of_next_line(Buffer *buffer, u32 cursor) {
-	return cursor_get_end_of_line(buffer, cursor_get_beginning_of_next_line(buffer, cursor));
-}
-
-INLINE u32 buffer_line_length(Buffer *buffer, u32 cursor) {
-	return cursor_get_end_of_line(buffer, cursor) - cursor_get_beginning_of_line(buffer, cursor);
-}
-
-INLINE u32 cursor_get_column(Buffer *buffer, u32 cursor) {
-	return cursor - cursor_get_beginning_of_line(buffer, cursor);
-}
-
-void pane_create(Bounds bounds, Buffer *buffer) {
-	Pane *pane = &panes[pane_count];
-
-	pane->bounds = bounds;
-	pane->buffer = buffer;
-	pane->start = 0;
-	pane->end = UINT32_MAX;
-	pane->showable_lines = 5;
-
-	active_pane = pane_count;
-	pane_count++;
-}
-
-void pane_destroy(Pane *pane) {
-	panes[pane - panes] = pane[pane_count - 1];
-	pane_count--;
-}
-
-void pane_set_active(u32 pane) {
-	current_buffer = panes[pane].buffer;
-	active_pane = pane;
-}
-
-u32 get_line_difference(Buffer *buffer, u32 start, u32 end) {
-	u32 lines = 0;
-	
-	while (end > start) {
-		if (buffer_get_char(buffer, end) == '\n') {
-			lines++;
-		}
-		end = cursor_back(buffer, end);
-	}
-
-	if (cursor_get_end_of_line(buffer, buffer->cursor) == buffer_length(buffer)) {
-		lines++;
-	}
-
-	return lines;
-}
-
-void pane_update_scroll(Pane *pane) {
-	Buffer *buffer = pane->buffer;
-	u32 start = MIN(buffer_length(buffer), pane->start);
-	u32 end = MIN(buffer_length(buffer), pane->end);
-
-	if (buffer->cursor < start) {
-		while (start > buffer->cursor) {
-			start = cursor_get_beginning_of_prev_line(buffer, start);
-		}
-
-		u32 line_diff = get_line_difference(buffer, start, end);
-		while (line_diff > pane->showable_lines) {
-			end = cursor_get_end_of_prev_line(buffer, end);
-			line_diff--;
-		}
-	}
-
-	if (buffer->cursor > end) {
-		while (end < buffer->cursor) {
-			end = cursor_get_end_of_next_line(buffer, end);
-		}
-
-		u32 line_diff = get_line_difference(buffer, start, end);
-		while (line_diff > pane->showable_lines) {
-			start = cursor_get_beginning_of_next_line(buffer, start);
-			line_diff--;
-		}
-	}
-
-	pane->start = start;
-	pane->end = end;
 }
