@@ -246,7 +246,6 @@ void pane_create(Bounds bounds, Buffer *buffer) {
 	pane->buffer = buffer;
 	pane->start = 0;
 	pane->end = UINT32_MAX;
-	pane->showable_lines = 5;
 
 	active_pane = pane_count;
 	pane_count++;
@@ -290,7 +289,7 @@ void pane_update_scroll(Pane *pane) {
 		}
 
 		u32 line_diff = get_line_difference(buffer, start, end);
-		while (line_diff > pane->showable_lines) {
+		while (line_diff > pane->bounds.height) {
 			end = cursor_get_end_of_prev_line(buffer, end);
 			line_diff--;
 		}
@@ -302,7 +301,7 @@ void pane_update_scroll(Pane *pane) {
 		}
 
 		u32 line_diff = get_line_difference(buffer, start, end);
-		while (line_diff > pane->showable_lines) {
+		while (line_diff > pane->bounds.height) {
 			start = cursor_get_beginning_of_next_line(buffer, start);
 			line_diff--;
 		}

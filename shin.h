@@ -69,9 +69,9 @@ struct InputEvent {
 
 struct Bounds {
 	u32 left;
-	u32 right;
 	u32 top;
-	u32 bottom;
+	u32 width;
+	u32 height;
 };
 
 struct Pane {
@@ -79,7 +79,6 @@ struct Pane {
 	Buffer *buffer;
 	u32 start;
 	u32 end;
-	u32 showable_lines;
 };
 
 void read_file_to_buffer(Buffer *buffer);

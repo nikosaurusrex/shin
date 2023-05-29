@@ -91,6 +91,7 @@ void create_default_keymaps() {
 
 	for (char ch = ' '; ch <= '~'; ++ch) {
 		keymap->commands[ch] = command_insert_char;
+		keymap->commands[ch | SHIFT] = command_insert_char;
 	}
 	keymap->commands[GLFW_KEY_ENTER] = command_insert_new_line;
 	keymap->commands[GLFW_KEY_DELETE] = command_delete_forwards;
@@ -223,17 +224,20 @@ void key_callback(GLFWwindow* window, s32 key, s32 scancode, s32 action, s32 mod
 		return;
 	}
 
-	if (GLFW_KEY_SPACE <= key && key <= GLFW_KEY_GRAVE_ACCENT) {
-		return;
+
+	if (!(mods & GLFW_MOD_CONTROL) && !(mods & GLFW_MOD_ALT)) {
+		if (GLFW_KEY_SPACE <= key && key <= GLFW_KEY_GRAVE_ACCENT) {
+			return;
+		}
 	}
 
 	u16 kcomb = key;
-	if (mods & GLFW_MOD_SHIFT) {
-		kcomb |= SHIFT;
-	}
-
 	if (mods & GLFW_MOD_CONTROL) {
 		kcomb |= CTRL;
+	}
+
+	if (mods & GLFW_MOD_SHIFT) {
+		kcomb |= SHIFT;
 	}
 
 	if (mods & GLFW_MOD_ALT) {
@@ -271,8 +275,6 @@ void character_callback(GLFWwindow* window, u32 key) {
 	if (glfwGetKey(window, GLFW_KEY_LEFT_ALT)) {
 		kcomb |= ALT;
 	}
-
-	printf("%d %d\n", (SHIFT | 'I'), kcomb);
 
 	last_input_event.type = INPUT_EVENT_PRESSED;
 	last_input_event.key_comb = kcomb;
@@ -404,12 +406,6 @@ void draw_buffer_resize(Renderer *renderer) {
 
 	glUniform2ui(3, metrics.glyph_width, metrics.glyph_height);
 	glUniform2ui(4, width, height);
-
-	for (u32 i = 0; i < pane_count; ++i) {
-		Bounds bounds = panes[i].bounds;
-		f32 height = (f32) (bounds.bottom - bounds.top);
-		panes[i].showable_lines = (u32) floorf(height / metrics.glyph_height);
-	}
 }
 
 void draw_buffer_init(Renderer *renderer) {
@@ -447,7 +443,7 @@ void renderer_init(Renderer *renderer, GLFWwindow *window) {
 }
 
 void renderer_init_glyph_map(FT_Library ft, Renderer *renderer) {
-	renderer->glyph_map = glyph_map_create(ft, "Consolas.ttf", 40);
+	renderer->glyph_map = glyph_map_create(ft, "Consolas.ttf", 20);
 
 	opengl_create_texture(0);
 	opengl_create_texture(1);
@@ -463,14 +459,10 @@ void window_update(GLFWwindow *window) {
 	glfwSwapBuffers(window);
 }
 
-void renderer_render(Renderer *renderer) {
+void renderer_render(Renderer *renderer, Pane *pane) {
 	DrawBuffer *draw_buffer = &renderer->buffer;
-
-	// clear screen
-	memset(draw_buffer->cells, 0, draw_buffer->cells_size);
-
-	Pane *pane = &panes[active_pane];
 	Buffer *buffer = pane->buffer;
+	Bounds bounds = pane->bounds;
 
 	pane_update_scroll(pane);
 
@@ -479,16 +471,20 @@ void renderer_render(Renderer *renderer) {
 	u32 pos;
 
 	char line[MAX_LINE_LENGTH];
+	bool draw_cursor = false;
 
-	for (pos = start; pos < buffer_length(buffer) && lines_drawn < draw_buffer->rows; pos = cursor_next(buffer, pos)) {
+	for (pos = start; pos < buffer_length(buffer) && lines_drawn < bounds.height; pos = cursor_next(buffer, pos)) {
 		u32 prev_pos = pos;
 
 		u32 line_length = buffer_get_line(buffer, line, sizeof(line) - 1, &pos);
 		line[line_length] = 0;
 
-		u32 draw_line_length = MIN(line_length, MIN(MAX_LINE_LENGTH, draw_buffer->columns));
+		u32 draw_line_length = MIN(line_length, MIN(MAX_LINE_LENGTH, MIN(bounds.width, draw_buffer->columns)));
+		u32 render_y = bounds.top + lines_drawn;
+
 		for (u32 i = 0; i < draw_line_length; ++i) {
-			Cell *cell = &draw_buffer->cells[i + lines_drawn * draw_buffer->columns];
+			u32 render_x = bounds.left + i;
+			Cell *cell = &draw_buffer->cells[render_x + render_y * draw_buffer->columns];
 			cell->glyph_index = line[i] - 32;
 			cell->foreground = 0xFFFFFF;
 			cell->background = 0x000000;
@@ -497,26 +493,47 @@ void renderer_render(Renderer *renderer) {
 
 		if (pane == &panes[active_pane] && prev_pos <= buffer->cursor && buffer->cursor <= pos) {
 			u32 i = buffer->cursor - prev_pos;
+			draw_cursor = true;
 
-			draw_buffer->cells[i + lines_drawn * draw_buffer->columns].glyph_mode = GLYPH_MODE_INVERT;
+			u32 cursor_render_x = bounds.left + i;
+			u32 cursor_render_y = bounds.top + lines_drawn;
+
+			draw_buffer->cells[cursor_render_x + cursor_render_y * draw_buffer->columns].glyph_mode = GLYPH_MODE_INVERT;
 		}
 
 		lines_drawn++;
-		
-		if (lines_drawn >= pane->showable_lines) {
-			break;
-		}
+	}
+
+	if (pane == &panes[active_pane] && buffer->cursor == buffer_length(buffer) && !draw_cursor) {
+		u32 cursor_render_x = bounds.left;
+		u32 cursor_render_y = bounds.top + lines_drawn;
+		draw_buffer->cells[cursor_render_x + cursor_render_y * draw_buffer->columns].glyph_mode = GLYPH_MODE_INVERT;
 	}
 
 	pane->end = cursor_get_end_of_line(buffer, pos);
 }
 
+void renderer_render_panes(Renderer *renderer) {
+	DrawBuffer *draw_buffer = &renderer->buffer;
+
+	// clear screen
+	memset(draw_buffer->cells, 0, draw_buffer->cells_size);
+
+	for (u32 i = 0; i < pane_count; ++i) {
+		renderer_render(renderer, &panes[i]);
+	}
+}
+
 int main() {
 	create_default_keymaps();
 	current_buffer = buffer_create(32);
-	current_buffer->file_path = (char *) "test.txt";
+	current_buffer->file_path = (char *) "test2.txt";
 
-	pane_create({0, 500, 0, 500}, current_buffer);
+	pane_create({32, 0, 30, 20}, current_buffer);
+
+	current_buffer = buffer_create(32);
+	current_buffer->file_path = (char *) "test.txt";
+	pane_create({0, 0, 30, 20}, current_buffer);
 
 	FT_Library ft;
 	FT_Init_FreeType(&ft);
@@ -545,7 +562,7 @@ int main() {
 
 			draw_buffer_resize(&renderer);
 
-			renderer_render(&renderer);
+			renderer_render_panes(&renderer);
 			query_cell_data(&renderer);
 			window_update(window);
 
