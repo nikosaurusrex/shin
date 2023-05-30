@@ -239,26 +239,24 @@ INLINE u32 cursor_get_column(Buffer *buffer, u32 cursor) {
 	return cursor - cursor_get_beginning_of_line(buffer, cursor);
 }
 
-void pane_create(Bounds bounds, Buffer *buffer) {
-	Pane *pane = &panes[pane_count];
+void pane_create(Pane *parent, Bounds bounds, Buffer *buffer) {
+	Pane *pane = &pane_pool[pane_count];
 
 	pane->bounds = bounds;
 	pane->buffer = buffer;
 	pane->start = 0;
 	pane->end = UINT32_MAX;
+	pane->parent = parent;
+	pane->child = 0;
 
-	active_pane = pane_count;
+	active_pane = pane;
+
 	pane_count++;
 }
 
 void pane_destroy(Pane *pane) {
-	panes[pane - panes] = pane[pane_count - 1];
+	pane_pool[pane - pane_pool] = pane[pane_count - 1];
 	pane_count--;
-}
-
-void pane_set_active(u32 pane) {
-	current_buffer = panes[pane].buffer;
-	active_pane = pane;
 }
 
 u32 get_line_difference(Buffer *buffer, u32 start, u32 end) {

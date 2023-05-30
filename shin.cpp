@@ -404,6 +404,13 @@ void draw_buffer_resize(Renderer *renderer) {
 	buffer->cells_size = sizeof(Cell) * buffer->columns * buffer->rows;
 	buffer->cells = (Cell *) realloc(buffer->cells, buffer->cells_size);
 
+	/* TODO: Layout management */
+	Bounds *bounds = &active_pane->bounds;
+	bounds->left = 0;
+	bounds->top = 0;
+	bounds->width = buffer->columns;
+	bounds->height = buffer->rows;
+
 	glUniform2ui(3, metrics.glyph_width, metrics.glyph_height);
 	glUniform2ui(4, width, height);
 }
@@ -491,7 +498,7 @@ void renderer_render(Renderer *renderer, Pane *pane) {
 			cell->glyph_mode = GLYPH_MODE_NORMAL;
 		}
 
-		if (pane == &panes[active_pane] && prev_pos <= buffer->cursor && buffer->cursor <= pos) {
+		if (pane == active_pane && prev_pos <= buffer->cursor && buffer->cursor <= pos) {
 			u32 i = buffer->cursor - prev_pos;
 			draw_cursor = true;
 
@@ -504,7 +511,7 @@ void renderer_render(Renderer *renderer, Pane *pane) {
 		lines_drawn++;
 	}
 
-	if (pane == &panes[active_pane] && buffer->cursor == buffer_length(buffer) && !draw_cursor) {
+	if (pane == active_pane && buffer->cursor == buffer_length(buffer) && !draw_cursor) {
 		u32 cursor_render_x = bounds.left;
 		u32 cursor_render_y = bounds.top + lines_drawn;
 		draw_buffer->cells[cursor_render_x + cursor_render_y * draw_buffer->columns].glyph_mode = GLYPH_MODE_INVERT;
@@ -519,21 +526,15 @@ void renderer_render_panes(Renderer *renderer) {
 	// clear screen
 	memset(draw_buffer->cells, 0, draw_buffer->cells_size);
 
-	for (u32 i = 0; i < pane_count; ++i) {
-		renderer_render(renderer, &panes[i]);
-	}
+	renderer_render(renderer, active_pane);
 }
 
 int main() {
 	create_default_keymaps();
-	current_buffer = buffer_create(32);
-	current_buffer->file_path = (char *) "test2.txt";
-
-	pane_create({32, 0, 30, 20}, current_buffer);
 
 	current_buffer = buffer_create(32);
 	current_buffer->file_path = (char *) "test.txt";
-	pane_create({0, 0, 30, 20}, current_buffer);
+	pane_create(0, {0, 0, 30, 20}, current_buffer);
 
 	FT_Library ft;
 	FT_Init_FreeType(&ft);

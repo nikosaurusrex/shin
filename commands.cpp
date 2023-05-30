@@ -93,20 +93,19 @@ COMMAND(goto_buffer_end) {
 }
 
 COMMAND(next_pane) {
-	active_pane++;
-	if (active_pane >= pane_count) {
-		active_pane = 0;
+	if (active_pane->child) {
+		active_pane = active_pane->child;
 	}
-	pane_set_active(active_pane);
+
+	current_buffer = active_pane->buffer;
 }
 
 COMMAND(prev_pane) {
-	if (active_pane > 0) {
-		active_pane--;
-	} else {
-		active_pane = pane_count - 1;
+	if (active_pane->parent) {
+		active_pane = active_pane->parent;
 	}
-	pane_set_active(active_pane);
+
+	current_buffer = active_pane->buffer;
 }
 
 COMMAND(new_line_before) {

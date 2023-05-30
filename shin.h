@@ -74,11 +74,15 @@ struct Bounds {
 	u32 height;
 };
 
+struct Pane;
 struct Pane {
 	Bounds bounds;
 	Buffer *buffer;
 	u32 start;
 	u32 end;
+
+	Pane *parent;
+	Pane *child;
 };
 
 void read_file_to_buffer(Buffer *buffer);
@@ -91,6 +95,7 @@ static Keymap *insert_keymap;
 static Keymap *normal_keymap;
 static InputEvent last_input_event;
 
-static Pane panes[MAX_PANES];
-static u32 pane_count;
-static u32 active_pane;
+#define MAX_PANES 12
+static Pane pane_pool[MAX_PANES];
+static u32 pane_count = 0;
+static Pane *active_pane;
