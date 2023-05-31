@@ -2,10 +2,19 @@
 #include "buffer.cpp"
 #include "commands.cpp"
 
+#ifdef _WIN32
 #define GLEW_STATIC
 #include <glew/glew.h>
+#endif
+
+#ifdef __APPLE__
+#include <OpenGL/gl3.h>
+#include <OpenGL/gl3ext.h>
+#endif
+
 #include <glfw/glfw3.h>
-#include <freetype/freetype.h>
+#include <ft2build.h>
+#include FT_FREETYPE_H
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
@@ -50,6 +59,12 @@ struct Renderer {
 	GLFWwindow *window;
 	DrawBuffer buffer;
 };
+
+static GLint shader_glyph_map_slot;
+static GLint shader_cells_slot;
+static GLint shader_cell_size_slot;
+static GLint shader_win_size_slot;
+static GLint shader_time_slot;
 
 void read_file_to_buffer(Buffer *buffer) {
 	FILE *file = fopen(buffer->file_path, "rb");
@@ -294,9 +309,9 @@ GLFWwindow *window_create(Renderer *renderer, u32 width, u32 height) {
 	glfwInit();
 
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
 
-#ifdef _MACH
+#ifdef __APPLE__
 	glfwWindowHint(GLFW_OPENGL_PROFILE,GLFW_OPENGL_CORE_PROFILE);
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
 #endif
@@ -349,15 +364,21 @@ void shaders_init() {
 	glDeleteShader(fragment_shader);
 
 	glUseProgram(program);
+
+	shader_glyph_map_slot = glGetUniformLocation(program, "glyph_map");
+	shader_cells_slot = glGetUniformLocation(program, "cells");
+	shader_cell_size_slot = glGetUniformLocation(program, "cell_size");
+	shader_win_size_slot = glGetUniformLocation(program, "win_size");
+	shader_time_slot = glGetUniformLocation(program, "time");
 }
 
-void opengl_create_texture(int id) {
+void opengl_create_texture(int id, GLint uniform_slot) {
 	GLuint tex;
 
 	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 
 	glGenTextures(1, &tex);
-	glUniform1i(id + 1, id);
+	glUniform1i(uniform_slot, id);
 	glActiveTexture(GL_TEXTURE0 + id);
 	glBindTexture(GL_TEXTURE_2D, tex);
 
@@ -411,8 +432,8 @@ void draw_buffer_resize(Renderer *renderer) {
 	bounds->width = buffer->columns;
 	bounds->height = buffer->rows;
 
-	glUniform2ui(3, metrics.glyph_width, metrics.glyph_height);
-	glUniform2ui(4, width, height);
+	glUniform2ui(shader_cell_size_slot, metrics.glyph_width, metrics.glyph_height);
+	glUniform2ui(shader_win_size_slot, width, height);
 }
 
 void draw_buffer_init(Renderer *renderer) {
@@ -452,8 +473,8 @@ void renderer_init(Renderer *renderer, GLFWwindow *window) {
 void renderer_init_glyph_map(FT_Library ft, Renderer *renderer) {
 	renderer->glyph_map = glyph_map_create(ft, "Consolas.ttf", 20);
 
-	opengl_create_texture(0);
-	opengl_create_texture(1);
+	opengl_create_texture(0, shader_glyph_map_slot);
+	opengl_create_texture(1, shader_cells_slot);
 
 	glyph_map_update_texture(renderer->glyph_map);
 	query_cell_data(renderer);
@@ -543,7 +564,9 @@ int main() {
 	
 	GLFWwindow *window = window_create(&renderer, 1280, 720);
 
+#ifdef _WIN32
 	glewInit();
+#endif
 
 	renderer_init(&renderer, window);
 	renderer_init_glyph_map(ft, &renderer);
@@ -559,7 +582,7 @@ int main() {
 		f64 delta = prev_time - current_time;
 
 		if (current_time - prev_time >= 0.01) {
-			glUniform1f(5, current_time);
+			glUniform1f(shader_time_slot, current_time);
 
 			draw_buffer_resize(&renderer);
 
