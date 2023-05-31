@@ -1,15 +1,17 @@
 #version 410 core
 
+#extension GL_ARB_explicit_uniform_location : enable
+
 layout(origin_upper_left) in vec4 gl_FragCoord;
 
 layout(location = 0) out vec4 color;
 
-layout(location=1) uniform sampler2D glyph_map;
-uniform usampler2D cells;
+layout(location = 1) uniform sampler2D glyph_map;
+layout(location = 2) uniform usampler2D cells;
 
-uniform uvec2 cell_size;
-uniform uvec2 win_size;
-uniform float time;
+layout(location = 3) uniform uvec2 cell_size;
+layout(location = 4) uniform uvec2 win_size;
+layout(location = 5) uniform float time;
 
 vec3 unpack_color(uint cp) {
 	uint r = (cp >> 16) & 0xFFu;
