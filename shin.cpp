@@ -432,8 +432,8 @@ void draw_buffer_resize(Renderer *renderer) {
 	bounds->width = buffer->columns;
 	bounds->height = buffer->rows;
 
-	glUniform2i(shader_cell_size_slot, metrics.glyph_width, metrics.glyph_height);
-	glUniform2i(shader_win_size_slot, width, height);
+	glUniform2ui(shader_cell_size_slot, metrics.glyph_width, metrics.glyph_height);
+	glUniform2ui(shader_win_size_slot, width, height);
 }
 
 void draw_buffer_init(Renderer *renderer) {
