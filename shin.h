@@ -83,16 +83,20 @@ struct Pane {
 	u32 start;
 	u32 end;
 
-	// @Temp
-	u32 bg;
-
 	Pane *parent;
 	Pane *child;
 };
 
-struct ColorScheme {
+struct Settings {
 	u32 bg;
 	u32 fg;
+	bool vsync;
+
+	bool show;
+
+	/* TODO: maybe rework this later */
+	f32 bg_temp[3];
+	f32 fg_temp[3];
 };
 
 void read_file_to_buffer(Buffer *buffer);
@@ -111,5 +115,4 @@ static Pane *root_pane;
 
 static Keymap *keymaps[MODES_COUNT];
 
-static ColorScheme color_scheme;
-static bool show_settings = false;
+static Settings settings;

@@ -248,7 +248,6 @@ Pane *pane_create(Pane *parent, Bounds bounds, Buffer *buffer) {
 	pane->end = UINT32_MAX;
 	pane->parent = parent;
 	pane->child = 0;
-	pane->bg = rand() | (0xFF << 24);
 
 	active_pane = pane;
 
@@ -311,7 +310,6 @@ void pane_update_scroll(Pane *pane) {
 	pane->end = end;
 }
 
-
 void pane_split_vertically() {
 	Pane *pane = active_pane;
 
@@ -327,4 +325,21 @@ void pane_split_vertically() {
 	pane->child = pane_create(pane, right_bounds, buffer_create(32));
 	
 	left_bounds->width = left_width;
+}
+
+void pane_split_horizontally() {
+	Pane *pane = active_pane;
+
+	Bounds *top_bounds = &pane->bounds;
+	u32 top_height = top_bounds->height / 2;
+
+	Bounds bot_bounds;
+	bot_bounds.left = top_bounds->left;
+	bot_bounds.top = top_height;
+	bot_bounds.width = top_bounds->width;
+	bot_bounds.height = top_bounds->height - top_height;
+
+	pane->child = pane_create(pane, bot_bounds, buffer_create(32));
+	
+	top_bounds->height = top_height;
 }

@@ -16,6 +16,10 @@
 #include <ft2build.h>
 #include FT_FREETYPE_H
 
+#include "extern/imgui/imgui.h"
+#include "extern/imgui/imgui_impl_glfw.h"
+#include "extern/imgui/imgui_impl_opengl3.h"
+
 #define GLYPH_MAP_COUNT_X 32
 #define GLYPH_MAP_COUNT_Y 16
 
@@ -92,6 +96,13 @@ void write_buffer_to_file(Buffer *buffer) {
 	fclose(file);
 }
 
+u32 color_hex_from_rgb(f32 rgb[3]) {
+	u32 r = (u32)(rgb[0] * 255.0f) << 16;
+	u32 g = (u32)(rgb[1] * 255.0f) << 8;
+	u32 b = (u32)(rgb[2] * 255.0f);
+	return r | g | b;
+}
+
 void shin_exit() {
 	/* TODO: exit */
 	// PostQuitMessage(0);
@@ -134,9 +145,10 @@ void create_default_keymaps() {
 	keymap->commands['O'] = command_new_line_after;
 	keymap->commands['O' | SHIFT] = command_new_line_before;
 	keymap->commands['G' | SHIFT] = command_goto_buffer_end;
+	keymap->commands['W' | CTRL] = command_window_operation;
+	keymap->commands[GLFW_KEY_F3] = command_show_settings;
 	// TODO: fix wrong binding
 	keymap->commands['G'] = command_goto_buffer_begin;
-	keymap->commands['W' | CTRL] = command_window_operation;
 
 	keymaps[MODE_NORMAL] = keymap;
 	
@@ -147,6 +159,8 @@ void create_default_keymaps() {
 	keymap->commands['L'] = command_next_pane;
 	keymap->commands['V' | CTRL] = command_split_vertically;
 	keymap->commands['V'] = command_split_vertically;
+	keymap->commands['S' | CTRL] = command_split_horizontally;
+	keymap->commands['S'] = command_split_horizontally;
 	keymaps[MODE_WINDOW_OPERATION] = keymap;
 }
 
@@ -305,6 +319,7 @@ GLFWwindow *window_create(Renderer *renderer, u32 width, u32 height) {
 
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
+	glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
 #ifdef __APPLE__
 	glfwWindowHint(GLFW_OPENGL_PROFILE,GLFW_OPENGL_CORE_PROFILE);
@@ -320,6 +335,17 @@ GLFWwindow *window_create(Renderer *renderer, u32 width, u32 height) {
 
 	glfwMakeContextCurrent(window);
 	glViewport(0, 0, width, height);
+
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGuiIO& io = ImGui::GetIO(); (void)io;
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+
+    ImGui::StyleColorsDark();
+
+    ImGui_ImplGlfw_InitForOpenGL(window, true);
+	const char* glsl_version = "#version 410 core";
+    ImGui_ImplOpenGL3_Init(glsl_version);
 
 	return window;
 }
@@ -480,15 +506,6 @@ void renderer_render(Renderer *renderer, Pane *pane) {
 
 	pane_update_scroll(pane);
 
-	for (u32 y = 0; y < bounds.height; ++y) {
-		for (u32 x = 0; x < bounds.width; ++x) {
-			u32 xx = bounds.left + x;
-			u32 yy = bounds.top + y;
-			
-			draw_buffer->cells[xx + yy * draw_buffer->columns].background = pane->bg;
-		}
-	}
-
 	u32 start = pane->start;
 	u32 lines_drawn = 0;
 	u32 pos;
@@ -509,8 +526,8 @@ void renderer_render(Renderer *renderer, Pane *pane) {
 			u32 render_x = bounds.left + i;
 			Cell *cell = &draw_buffer->cells[render_x + render_y * draw_buffer->columns];
 			cell->glyph_index = line[i] - 32;
-			cell->foreground = color_scheme.fg;
-			cell->background = color_scheme.bg;
+			cell->foreground = settings.fg;
+			cell->background = settings.bg;
 			cell->glyph_mode = GLYPH_MODE_NORMAL;
 		}
 
@@ -539,6 +556,8 @@ void renderer_render(Renderer *renderer, Pane *pane) {
 void renderer_render_panes(Renderer *renderer) {
 	DrawBuffer *draw_buffer = &renderer->buffer;
 
+	memset(draw_buffer->cells, 0, draw_buffer->cells_size);
+
 	Pane *pane = root_pane;
 	while (pane) {
 		renderer_render(renderer, pane);
@@ -552,10 +571,26 @@ void renderer_end(GLFWwindow *window) {
 	glDrawArrays(GL_TRIANGLES, 0, 6);
 }
 
+void render_settings_window(GLFWwindow *window) {
+	ImGui::Begin("Settings");
+
+	ImGui::ColorEdit3("Background color", settings.bg_temp, ImGuiColorEditFlags_NoInputs);
+	ImGui::ColorEdit3("Foreground color", settings.fg_temp, ImGuiColorEditFlags_NoInputs);
+	ImGui::Checkbox("Vsync", &settings.vsync);
+
+	settings.bg = color_hex_from_rgb(settings.bg_temp);
+	settings.fg = color_hex_from_rgb(settings.fg_temp);
+
+	glfwSwapInterval(settings.vsync ? 1 : 0);
+
+	ImGui::End();
+}
+
 int main() {
 	create_default_keymaps();
 
-	color_scheme = {0x000000, 0xffffff};
+	settings.fg = 0xFFFFFF;
+	settings.fg_temp[0] = settings.fg_temp[1] = settings.fg_temp[2] = 1.0f;
 
 	current_buffer = buffer_create(32);
 	current_buffer->file_path = (char *) "test.txt";
@@ -577,28 +612,51 @@ int main() {
 	renderer_init_glyph_map(ft, &renderer);
 	draw_buffer_init(&renderer);
 
-
 	glClearColor(0.0, 0.0, 0.0, 1.0);
 
 	f64 prev_time = glfwGetTime();
+	u32 frames = 0;
 	while (!glfwWindowShouldClose(window)) {
 		glfwPollEvents();
 
 		f64 current_time = glfwGetTime();
-		f64 delta = prev_time - current_time;
+		f64 delta = current_time - prev_time;
 
-		if (current_time - prev_time >= 0.01) {
-			glUniform1f(renderer.shader_time_slot, current_time);
+		frames++;
+		if (delta >= 1) {
+			char title[128];
+			sprintf(title, "%d FPS, %f ms/f\n", frames, (delta * 1000)/frames);
+			glfwSetWindowTitle(window, title);
 
-			query_cell_data(&renderer);
-			renderer_render_panes(&renderer);
-			renderer_end(window);
+			frames = 0;
 
 			prev_time = current_time;
 		}
+		
+		glUniform1f(renderer.shader_time_slot, current_time);
+
+		/* TODO: think about order of these calls */
+		renderer_render_panes(&renderer);
+		query_cell_data(&renderer);
+		renderer_end(window);
+		
+		if (settings.show) {
+			ImGui_ImplOpenGL3_NewFrame();
+        	ImGui_ImplGlfw_NewFrame();
+        	ImGui::NewFrame();
+
+			render_settings_window(window);
+
+			ImGui::Render();
+			ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+		}
+
 		glfwSwapBuffers(window);
 	}
 
+    ImGui_ImplOpenGL3_Shutdown();
+    ImGui_ImplGlfw_Shutdown();
+    ImGui::DestroyContext();
 	glfwTerminate();
 	return 0;
 }

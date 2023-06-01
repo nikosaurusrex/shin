@@ -126,11 +126,18 @@ COMMAND(prev_pane) {
 
 COMMAND(split_vertically) {
 	pane_split_vertically();
+	active_pane = active_pane->child;
+	current_buffer->mode = MODE_NORMAL;
+}
+
+COMMAND(split_horizontally) {
+	pane_split_horizontally();
+	active_pane = active_pane->child;
 	current_buffer->mode = MODE_NORMAL;
 }
 
 COMMAND(show_settings) {
-	show_settings = !show_settings;
+	settings.show = !settings.show;
 }
 
 COMMAND(quit) {
