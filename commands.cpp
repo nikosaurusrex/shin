@@ -92,22 +92,6 @@ COMMAND(goto_buffer_end) {
 	current_buffer->cursor = buffer_length(current_buffer);
 }
 
-COMMAND(next_pane) {
-	if (active_pane->child) {
-		active_pane = active_pane->child;
-	}
-
-	current_buffer = active_pane->buffer;
-}
-
-COMMAND(prev_pane) {
-	if (active_pane->parent) {
-		active_pane = active_pane->parent;
-	}
-
-	current_buffer = active_pane->buffer;
-}
-
 COMMAND(new_line_before) {
 	command_fn_goto_beginning_of_line();
 	command_fn_insert_new_line();
@@ -116,6 +100,37 @@ COMMAND(new_line_before) {
 COMMAND(new_line_after) {
 	command_fn_goto_end_of_line();
 	command_fn_insert_new_line();
+}
+
+COMMAND(window_operation) {
+	current_buffer->mode = MODE_WINDOW_OPERATION;
+}
+
+COMMAND(next_pane) {
+	if (active_pane->child) {
+		active_pane = active_pane->child;
+	}
+
+	current_buffer = active_pane->buffer;
+	current_buffer->mode = MODE_NORMAL;
+}
+
+COMMAND(prev_pane) {
+	if (active_pane->parent) {
+		active_pane = active_pane->parent;
+	}
+
+	current_buffer = active_pane->buffer;
+	current_buffer->mode = MODE_NORMAL;
+}
+
+COMMAND(split_vertically) {
+	pane_split_vertically();
+	current_buffer->mode = MODE_NORMAL;
+}
+
+COMMAND(show_settings) {
+	show_settings = !show_settings;
 }
 
 COMMAND(quit) {

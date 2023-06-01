@@ -28,8 +28,10 @@ typedef double f64;
 typedef void (*CommandFunction)();
 
 enum Mode {
-	MODE_INSERT,
-	MODE_NORMAL
+	MODE_INSERT = 0,
+	MODE_NORMAL = 1,
+	MODE_WINDOW_OPERATION = 2,
+	MODES_COUNT
 };
 
 struct Buffer {
@@ -81,8 +83,16 @@ struct Pane {
 	u32 start;
 	u32 end;
 
+	// @Temp
+	u32 bg;
+
 	Pane *parent;
 	Pane *child;
+};
+
+struct ColorScheme {
+	u32 bg;
+	u32 fg;
 };
 
 void read_file_to_buffer(Buffer *buffer);
@@ -91,11 +101,15 @@ void shin_exit();
 
 /* TODO: Clean up globals */
 static Buffer *current_buffer;
-static Keymap *insert_keymap;
-static Keymap *normal_keymap;
 static InputEvent last_input_event;
 
 #define MAX_PANES 12
 static Pane pane_pool[MAX_PANES];
 static u32 pane_count = 0;
 static Pane *active_pane;
+static Pane *root_pane;
+
+static Keymap *keymaps[MODES_COUNT];
+
+static ColorScheme color_scheme;
+static bool show_settings = false;

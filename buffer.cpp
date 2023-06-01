@@ -239,7 +239,7 @@ INLINE u32 cursor_get_column(Buffer *buffer, u32 cursor) {
 	return cursor - cursor_get_beginning_of_line(buffer, cursor);
 }
 
-void pane_create(Pane *parent, Bounds bounds, Buffer *buffer) {
+Pane *pane_create(Pane *parent, Bounds bounds, Buffer *buffer) {
 	Pane *pane = &pane_pool[pane_count];
 
 	pane->bounds = bounds;
@@ -248,10 +248,12 @@ void pane_create(Pane *parent, Bounds bounds, Buffer *buffer) {
 	pane->end = UINT32_MAX;
 	pane->parent = parent;
 	pane->child = 0;
+	pane->bg = rand() | (0xFF << 24);
 
 	active_pane = pane;
 
 	pane_count++;
+	return pane;
 }
 
 void pane_destroy(Pane *pane) {
@@ -307,4 +309,22 @@ void pane_update_scroll(Pane *pane) {
 
 	pane->start = start;
 	pane->end = end;
+}
+
+
+void pane_split_vertically() {
+	Pane *pane = active_pane;
+
+	Bounds *left_bounds = &pane->bounds;
+	u32 left_width = left_bounds->width / 2;
+
+	Bounds right_bounds;
+	right_bounds.left = left_width;
+	right_bounds.top = left_bounds->top;
+	right_bounds.width = left_bounds->width - left_width;
+	right_bounds.height = left_bounds->height;
+
+	pane->child = pane_create(pane, right_bounds, buffer_create(32));
+	
+	left_bounds->width = left_width;
 }

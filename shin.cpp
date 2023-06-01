@@ -16,9 +16,6 @@
 #include <ft2build.h>
 #include FT_FREETYPE_H
 
-#define STB_IMAGE_WRITE_IMPLEMENTATION
-#include "stb_image_write.h"
-
 #define GLYPH_MAP_COUNT_X 32
 #define GLYPH_MAP_COUNT_Y 16
 
@@ -58,13 +55,13 @@ struct Renderer {
 	GlyphMap *glyph_map;
 	GLFWwindow *window;
 	DrawBuffer buffer;
-};
 
-static GLint shader_glyph_map_slot;
-static GLint shader_cells_slot;
-static GLint shader_cell_size_slot;
-static GLint shader_win_size_slot;
-static GLint shader_time_slot;
+	GLint shader_glyph_map_slot;
+	GLint shader_cells_slot;
+	GLint shader_cell_size_slot;
+	GLint shader_win_size_slot;
+	GLint shader_time_slot;
+};
 
 void read_file_to_buffer(Buffer *buffer) {
 	FILE *file = fopen(buffer->file_path, "rb");
@@ -118,7 +115,7 @@ void create_default_keymaps() {
 	keymap->commands['R' | CTRL] = command_reload_buffer;
 	keymap->commands[GLFW_KEY_ESCAPE] = command_normal_mode;
 
-	insert_keymap = keymap;
+	keymaps[MODE_INSERT] = keymap;
 	
 // normal keymap
 	keymap = keymap_create_empty();
@@ -136,12 +133,21 @@ void create_default_keymaps() {
 	keymap->commands['A'] = command_insert_mode_next;
 	keymap->commands['O'] = command_new_line_after;
 	keymap->commands['O' | SHIFT] = command_new_line_before;
+	keymap->commands['G' | SHIFT] = command_goto_buffer_end;
 	// TODO: fix wrong binding
 	keymap->commands['G'] = command_goto_buffer_begin;
-	keymap->commands['G' | SHIFT] = command_goto_buffer_end;
+	keymap->commands['W' | CTRL] = command_window_operation;
+
+	keymaps[MODE_NORMAL] = keymap;
+	
+	keymap = keymap_create_empty();
 	keymap->commands['H' | CTRL] = command_prev_pane;
+	keymap->commands['H'] = command_prev_pane;
 	keymap->commands['L' | CTRL] = command_next_pane;
-	normal_keymap = keymap;
+	keymap->commands['L'] = command_next_pane;
+	keymap->commands['V' | CTRL] = command_split_vertically;
+	keymap->commands['V'] = command_split_vertically;
+	keymaps[MODE_WINDOW_OPERATION] = keymap;
 }
 
 char *read_entire_file(const char *file_path) {
@@ -239,7 +245,6 @@ void key_callback(GLFWwindow* window, s32 key, s32 scancode, s32 action, s32 mod
 		return;
 	}
 
-
 	if (!(mods & GLFW_MOD_CONTROL) && !(mods & GLFW_MOD_ALT)) {
 		if (GLFW_KEY_SPACE <= key && key <= GLFW_KEY_GRAVE_ACCENT) {
 			return;
@@ -263,12 +268,7 @@ void key_callback(GLFWwindow* window, s32 key, s32 scancode, s32 action, s32 mod
 	last_input_event.key_comb = kcomb;
 	last_input_event.ch = (char) key;
 
-	Keymap *keymap;
-	if (current_buffer->mode == MODE_NORMAL) {
-		keymap = normal_keymap;
-	} else {
-		keymap = insert_keymap;
-	}
+	Keymap *keymap = keymaps[current_buffer->mode];
 
 	keymap_dispatch_event(keymap, last_input_event);
 }
@@ -295,12 +295,7 @@ void character_callback(GLFWwindow* window, u32 key) {
 	last_input_event.key_comb = kcomb;
 	last_input_event.ch = (char) key;
 
-	Keymap *keymap;
-	if (current_buffer->mode == MODE_NORMAL) {
-		keymap = normal_keymap;
-	} else {
-		keymap = insert_keymap;
-	}
+	Keymap *keymap = keymaps[current_buffer->mode];
 
 	keymap_dispatch_event(keymap, last_input_event);
 }
@@ -348,9 +343,9 @@ GLuint shader_load(char *code, GLenum type) {
 	return shader;
 }
 
-void shaders_init() {
-	char *vertex_code = read_entire_file("shaders/vert.glsl");
-	char *fragment_code = read_entire_file("shaders/frag.glsl");
+void shaders_init(Renderer *renderer) {
+	char *vertex_code = read_entire_file("resources/vert.glsl");
+	char *fragment_code = read_entire_file("resources/frag.glsl");
 
 	GLuint vertex_shader = shader_load(vertex_code, GL_VERTEX_SHADER);
 	GLuint fragment_shader = shader_load(fragment_code, GL_FRAGMENT_SHADER);
@@ -365,11 +360,11 @@ void shaders_init() {
 
 	glUseProgram(program);
 
-	shader_glyph_map_slot = glGetUniformLocation(program, "glyph_map");
-	shader_cells_slot = glGetUniformLocation(program, "cells");
-	shader_cell_size_slot = glGetUniformLocation(program, "cell_size");
-	shader_win_size_slot = glGetUniformLocation(program, "win_size");
-	shader_time_slot = glGetUniformLocation(program, "time");
+	renderer->shader_glyph_map_slot = glGetUniformLocation(program, "glyph_map");
+	renderer->shader_cells_slot = glGetUniformLocation(program, "cells");
+	renderer->shader_cell_size_slot = glGetUniformLocation(program, "cell_size");
+	renderer->shader_win_size_slot = glGetUniformLocation(program, "win_size");
+	renderer->shader_time_slot = glGetUniformLocation(program, "time");
 }
 
 void opengl_create_texture(int id, GLint uniform_slot) {
@@ -402,8 +397,6 @@ void glyph_map_update_texture(GlyphMap *glyph_map) {
 		GL_UNSIGNED_BYTE,
 		glyph_map->data	
 	);
-
-	stbi_write_png("glyph_map.png", glyph_map->width, glyph_map->height, 1, glyph_map->data, glyph_map->width);
 }
 
 void query_cell_data(Renderer *renderer) {
@@ -432,8 +425,8 @@ void draw_buffer_resize(Renderer *renderer) {
 	bounds->width = buffer->columns;
 	bounds->height = buffer->rows;
 
-	glUniform2ui(shader_cell_size_slot, metrics.glyph_width, metrics.glyph_height);
-	glUniform2ui(shader_win_size_slot, width, height);
+	glUniform2ui(renderer->shader_cell_size_slot, metrics.glyph_width, metrics.glyph_height);
+	glUniform2ui(renderer->shader_win_size_slot, width, height);
 }
 
 void draw_buffer_init(Renderer *renderer) {
@@ -446,7 +439,7 @@ void draw_buffer_init(Renderer *renderer) {
 void renderer_init(Renderer *renderer, GLFWwindow *window) {
 	renderer->window = window;
 
-	shaders_init();
+	shaders_init(renderer);
 
 	f32 vertices[12] = {
 		-1.0, -1.0,
@@ -471,20 +464,13 @@ void renderer_init(Renderer *renderer, GLFWwindow *window) {
 }
 
 void renderer_init_glyph_map(FT_Library ft, Renderer *renderer) {
-	renderer->glyph_map = glyph_map_create(ft, "Consolas.ttf", 20);
+	renderer->glyph_map = glyph_map_create(ft, "resources/consolas.ttf", 20);
 
-	opengl_create_texture(0, shader_glyph_map_slot);
-	opengl_create_texture(1, shader_cells_slot);
+	opengl_create_texture(0, renderer->shader_glyph_map_slot);
+	opengl_create_texture(1, renderer->shader_cells_slot);
 
 	glyph_map_update_texture(renderer->glyph_map);
 	query_cell_data(renderer);
-}
-
-void window_update(GLFWwindow *window) {
-	glClear(GL_COLOR_BUFFER_BIT);
-
-	glDrawArrays(GL_TRIANGLES, 0, 6);
-	glfwSwapBuffers(window);
 }
 
 void renderer_render(Renderer *renderer, Pane *pane) {
@@ -493,6 +479,15 @@ void renderer_render(Renderer *renderer, Pane *pane) {
 	Bounds bounds = pane->bounds;
 
 	pane_update_scroll(pane);
+
+	for (u32 y = 0; y < bounds.height; ++y) {
+		for (u32 x = 0; x < bounds.width; ++x) {
+			u32 xx = bounds.left + x;
+			u32 yy = bounds.top + y;
+			
+			draw_buffer->cells[xx + yy * draw_buffer->columns].background = pane->bg;
+		}
+	}
 
 	u32 start = pane->start;
 	u32 lines_drawn = 0;
@@ -514,8 +509,8 @@ void renderer_render(Renderer *renderer, Pane *pane) {
 			u32 render_x = bounds.left + i;
 			Cell *cell = &draw_buffer->cells[render_x + render_y * draw_buffer->columns];
 			cell->glyph_index = line[i] - 32;
-			cell->foreground = 0xFFFFFF;
-			cell->background = 0x000000;
+			cell->foreground = color_scheme.fg;
+			cell->background = color_scheme.bg;
 			cell->glyph_mode = GLYPH_MODE_NORMAL;
 		}
 
@@ -544,18 +539,28 @@ void renderer_render(Renderer *renderer, Pane *pane) {
 void renderer_render_panes(Renderer *renderer) {
 	DrawBuffer *draw_buffer = &renderer->buffer;
 
-	// clear screen
-	memset(draw_buffer->cells, 0, draw_buffer->cells_size);
+	Pane *pane = root_pane;
+	while (pane) {
+		renderer_render(renderer, pane);
+		pane = pane->child;
+	}
+}
 
-	renderer_render(renderer, active_pane);
+void renderer_end(GLFWwindow *window) {
+	glClear(GL_COLOR_BUFFER_BIT);
+
+	glDrawArrays(GL_TRIANGLES, 0, 6);
 }
 
 int main() {
 	create_default_keymaps();
 
+	color_scheme = {0x000000, 0xffffff};
+
 	current_buffer = buffer_create(32);
 	current_buffer->file_path = (char *) "test.txt";
 	pane_create(0, {0, 0, 30, 20}, current_buffer);
+	root_pane = active_pane;
 
 	FT_Library ft;
 	FT_Init_FreeType(&ft);
@@ -571,7 +576,8 @@ int main() {
 	renderer_init(&renderer, window);
 	renderer_init_glyph_map(ft, &renderer);
 	draw_buffer_init(&renderer);
-	
+
+
 	glClearColor(0.0, 0.0, 0.0, 1.0);
 
 	f64 prev_time = glfwGetTime();
@@ -582,19 +588,17 @@ int main() {
 		f64 delta = prev_time - current_time;
 
 		if (current_time - prev_time >= 0.01) {
-			glUniform1f(shader_time_slot, current_time);
+			glUniform1f(renderer.shader_time_slot, current_time);
 
-			draw_buffer_resize(&renderer);
-
-			renderer_render_panes(&renderer);
 			query_cell_data(&renderer);
-			window_update(window);
+			renderer_render_panes(&renderer);
+			renderer_end(window);
 
 			prev_time = current_time;
 		}
+		glfwSwapBuffers(window);
 	}
 
 	glfwTerminate();
-
 	return 0;
 }

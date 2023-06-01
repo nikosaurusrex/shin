@@ -1,3 +1,5 @@
+cleanup globals
+build system
 rethink command system
 allow commands to be multi-chars like Ctrl-wv for splitting vertically
 implement more commands like w,e,b, goto-line, search
