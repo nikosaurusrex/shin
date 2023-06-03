@@ -239,6 +239,46 @@ INLINE u32 cursor_get_column(Buffer *buffer, u32 cursor) {
 	return cursor - cursor_get_beginning_of_line(buffer, cursor);
 }
 
+u32 cursor_get_beginning_of_word(Buffer *buffer, u32 cursor) {
+	while (cursor > 0 && !isspace(buffer_get_char(buffer, cursor))) {
+		cursor--;
+	}
+
+	return cursor + 1;
+}
+
+u32 cursor_get_end_of_word(Buffer *buffer, u32 cursor) {
+	while (cursor < buffer_length(buffer) &&
+		   !isspace(buffer_get_char(buffer, cursor))) {
+			
+		cursor++;
+	}
+
+	return cursor - 1;
+}
+
+u32 cursor_get_next_word(Buffer *buffer, u32 cursor) {
+	cursor = cursor_get_end_of_word(buffer, cursor);
+	cursor = cursor_next(buffer, cursor);
+
+	while (cursor < buffer_length(buffer) && isspace(buffer_get_char(buffer, cursor))) {
+		cursor++;
+	}
+
+	return cursor;
+}
+
+u32 cursor_get_prev_word(Buffer *buffer, u32 cursor) {
+	cursor = cursor_get_beginning_of_word(buffer, cursor);
+	cursor = cursor_back(buffer, cursor);
+
+	while (cursor > 0 && isspace(buffer_get_char(buffer, cursor))) {
+		cursor--;
+	}
+
+	return cursor;
+}
+
 Pane *pane_create(Pane *parent, Bounds bounds, Buffer *buffer) {
 	Pane *pane = &pane_pool[pane_count];
 

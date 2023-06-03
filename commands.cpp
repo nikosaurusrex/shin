@@ -9,6 +9,7 @@ void command_execute(char *command, char args[MAX_TOKENS][MAX_TOKEN_LENGTH], u32
         Buffer *target_buffer = command_pane->parent->buffer;
 
         if (args_count > 0) {
+            free(target_buffer->file_path);
             target_buffer->file_path = strdup(args[0]);
         }
         write_buffer_to_file(target_buffer);
@@ -16,6 +17,7 @@ void command_execute(char *command, char args[MAX_TOKENS][MAX_TOKEN_LENGTH], u32
         Buffer *target_buffer = command_pane->parent->buffer;
 
         if (args_count > 0) {
+            free(target_buffer->file_path);
             target_buffer->file_path = strdup(args[0]);
         }
         read_file_to_buffer(target_buffer);

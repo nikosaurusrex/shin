@@ -1,10 +1,6 @@
 cleanup globals
-build system
-rethink command system
-allow commands to be multi-chars like Ctrl-wv for splitting vertically
-implement more commands like w,e,b, goto-line, search
+implement more commands like w,e,b, goto-line, search, { }
 32j, 32k and so on...
+
 layout management
 changing font/colors
-file open dialog/save dialog/file management
-imgui

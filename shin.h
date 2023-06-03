@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 
 #define MIN(a,b) (a < b ? a : b)
 #define MAX(a,b) (a > b ? a : b)
@@ -91,6 +92,7 @@ struct Settings {
 	u32 bg;
 	u32 fg;
 	bool vsync;
+	u32 tab_width;
 
 	bool show;
 

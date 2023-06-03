@@ -117,6 +117,7 @@ void create_default_keymaps() {
 		keymap->shortcuts[ch | SHIFT] = shortcut_insert_char;
 	}
 	keymap->shortcuts[GLFW_KEY_ENTER] = shortcut_insert_new_line;
+	keymap->shortcuts[GLFW_KEY_TAB] = shortcut_insert_tab;
 	keymap->shortcuts[GLFW_KEY_DELETE] = shortcut_delete_forwards;
 	keymap->shortcuts[GLFW_KEY_BACKSPACE] = shortcut_delete_backwards;
 	keymap->shortcuts[GLFW_KEY_LEFT] = shortcut_cursor_back;
@@ -133,6 +134,9 @@ void create_default_keymaps() {
 	keymap->shortcuts['L'] = shortcut_cursor_next;
 	keymap->shortcuts['J'] = shortcut_next_line;
 	keymap->shortcuts['K'] = shortcut_prev_line;
+	keymap->shortcuts['W'] = shortcut_go_word_next;
+	keymap->shortcuts['E'] = shortcut_go_word_end;
+	keymap->shortcuts['B'] = shortcut_go_word_prev;
 	keymap->shortcuts['I' | SHIFT] = shortcut_goto_beginning_of_line;
 	keymap->shortcuts['A' | SHIFT] = shortcut_goto_end_of_line;
 	keymap->shortcuts[GLFW_KEY_F4 | ALT] = shortcut_quit;
@@ -533,7 +537,9 @@ void renderer_render(Renderer *renderer, Pane *pane) {
 	u32 pos;
 
 	char line[MAX_LINE_LENGTH];
-	bool draw_cursor = false;
+	bool should_draw_cursor = false;
+	bool has_drawn_cursor = false;
+	bool is_active_pane = pane == active_pane;
 
 	for (pos = start; pos < buffer_length(buffer) && lines_drawn < bounds.height; pos = cursor_next(buffer, pos)) {
 		u32 prev_pos = pos;
@@ -541,35 +547,50 @@ void renderer_render(Renderer *renderer, Pane *pane) {
 		u32 line_length = buffer_get_line(buffer, line, sizeof(line) - 1, &pos);
 		line[line_length] = 0;
 
+		if (is_active_pane && (prev_pos <= buffer->cursor && buffer->cursor <= pos)
+		) {
+			should_draw_cursor = true;
+		}
+
 		u32 draw_line_length = MIN(line_length, MIN(MAX_LINE_LENGTH, MIN(bounds.width, draw_buffer->columns)));
+
+		u32 render_x = bounds.left;
 		u32 render_y = bounds.top + lines_drawn;
 
 		for (u32 i = 0; i < draw_line_length; ++i) {
-			u32 render_x = bounds.left + i;
+			char ch = line[i];
 			Cell *cell = &draw_buffer->cells[render_x + render_y * draw_buffer->columns];
-			cell->glyph_index = line[i] - 32;
+
+			cell->glyph_index = ch - 32;
 			cell->foreground = settings.fg;
 			cell->background = settings.bg;
 			cell->glyph_mode = GLYPH_MODE_NORMAL;
+
+			if (ch == '\t') {
+				render_x += settings.tab_width;
+			} else {
+				render_x++;
+			}
+
+			if (should_draw_cursor) {
+				u32 cursor_buffer_rel_line_pos = buffer->cursor - prev_pos;
+				if (cursor_buffer_rel_line_pos == i) {
+					cell->glyph_mode = GLYPH_MODE_INVERT;
+					has_drawn_cursor = true;
+				}
+			}
 		}
-
-		if (pane == active_pane && prev_pos <= buffer->cursor && buffer->cursor <= pos) {
-			u32 i = buffer->cursor - prev_pos;
-			draw_cursor = true;
-
-			u32 cursor_render_x = bounds.left + i;
-			u32 cursor_render_y = bounds.top + lines_drawn;
-
-			draw_buffer->cells[cursor_render_x + cursor_render_y * draw_buffer->columns].glyph_mode = GLYPH_MODE_INVERT;
+		
+		if (!has_drawn_cursor && pos == buffer->cursor) {
+			draw_buffer->cells[render_x + render_y * draw_buffer->columns].glyph_mode = GLYPH_MODE_INVERT;
+			has_drawn_cursor = true;
 		}
 
 		lines_drawn++;
 	}
 
-	if (pane == active_pane && buffer->cursor == buffer_length(buffer) && !draw_cursor) {
-		u32 cursor_render_x = bounds.left;
-		u32 cursor_render_y = bounds.top + lines_drawn;
-		draw_buffer->cells[cursor_render_x + cursor_render_y * draw_buffer->columns].glyph_mode = GLYPH_MODE_INVERT;
+	if (is_active_pane && !has_drawn_cursor) {
+		draw_buffer->cells[bounds.left + (bounds.top + lines_drawn) * draw_buffer->columns].glyph_mode = GLYPH_MODE_INVERT;
 	}
 
 	pane->end = cursor_get_end_of_line(buffer, pos);
@@ -612,6 +633,7 @@ int main() {
 
 	settings.fg = 0xFFFFFF;
 	settings.fg_temp[0] = settings.fg_temp[1] = settings.fg_temp[2] = 1.0f;
+	settings.tab_width = 4;
 
 	Buffer *command_buffer = buffer_create(32);
 	command_buffer->mode = MODE_COMMAND;
@@ -650,7 +672,7 @@ int main() {
 		frames++;
 		if (delta >= 1) {
 			char title[128];
-			sprintf(title, "%d FPS, %f ms/f\n", frames, (delta * 1000)/frames);
+			sprintf(title, "Shin: '%s' %d FPS, %f ms/f\n", current_buffer->file_path, frames, (delta * 1000)/frames);
 			glfwSetWindowTitle(window, title);
 
 			frames = 0;

@@ -48,9 +48,44 @@ SHORTCUT(prev_line) {
 
 	buffer_set_cursor(buffer, beginning_of_prev_line + MIN(prev_line_length, column));
 }
+ 
+SHORTCUT(go_word_next) {
+	Buffer *buffer = current_buffer;
+	buffer->cursor = cursor_get_next_word(buffer, buffer->cursor);
+}
+
+SHORTCUT(go_word_end) {
+	Buffer *buffer = current_buffer;
+	
+	if (isspace(buffer_get_char(buffer, buffer->cursor))) {
+		buffer->cursor = cursor_get_next_word(buffer, buffer->cursor);
+	} else if (buffer->cursor + 1 < buffer_length(buffer) &&
+			   isspace(buffer_get_char(buffer, buffer->cursor + 1))) {
+		buffer->cursor = cursor_get_next_word(buffer, buffer->cursor);
+	}  else {
+		buffer->cursor = cursor_get_end_of_word(buffer, buffer->cursor);
+	}
+}	
+
+SHORTCUT(go_word_prev) {
+	Buffer *buffer = current_buffer;
+
+	if (isspace(buffer_get_char(buffer, buffer->cursor))) {
+		buffer->cursor = cursor_get_prev_word(buffer, buffer->cursor);
+	} else if (buffer->cursor - 1 >= 0 &&
+			   isspace(buffer_get_char(buffer, buffer->cursor - 1))) {
+		buffer->cursor = cursor_get_prev_word(buffer, buffer->cursor);
+	}  else {
+		buffer->cursor = cursor_get_beginning_of_word(buffer, buffer->cursor);
+	}
+}
 
 SHORTCUT(insert_new_line) {
 	buffer_insert(current_buffer, current_buffer->cursor, '\n');
+}
+
+SHORTCUT(insert_tab) {
+	buffer_insert(current_buffer, current_buffer->cursor, '\t');
 }
 
 SHORTCUT(goto_beginning_of_line) {
