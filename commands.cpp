@@ -1,167 +1,75 @@
-#define COMMAND(name) \
-	void command_fn_##name(); \
-	Command command_##name = {#name, command_fn_##name}; \
-	void command_fn_##name()
+#define MAX_COMMAND_LENGTH 256
+#define MAX_TOKEN_LENGTH 128
+#define MAX_TOKENS 4
 
-#define CTRL  (1 << 8)
-#define ALT   (1 << 9)
-#define SHIFT (1 << 10)
+void command_execute(char *command, char args[MAX_TOKENS][MAX_TOKEN_LENGTH], u32 args_count) {
+    /* TODO: rework with good system */
 
-COMMAND(null) {
-	// shin_beep();
+    if (strcmp(command, "w") == 0) {
+        Buffer *target_buffer = command_pane->parent->buffer;
+
+        if (args_count > 0) {
+            target_buffer->file_path = strdup(args[0]);
+        }
+        write_buffer_to_file(target_buffer);
+    } else if (strcmp(command, "find") == 0) {
+        Buffer *target_buffer = command_pane->parent->buffer;
+
+        if (args_count > 0) {
+            target_buffer->file_path = strdup(args[0]);
+        }
+        read_file_to_buffer(target_buffer);
+    } else if (strcmp(command, "q") == 0) {
+        global_running = false;
+    }
 }
 
-COMMAND(insert_char) {
-	buffer_insert(current_buffer, current_buffer->cursor, last_input_event.ch);
-}
+void command_parse_and_run() {
+	char command_raw[MAX_COMMAND_LENGTH];
+    u32 _ignored = 0;
 
-COMMAND(delete_forwards) {
-	buffer_delete_forwards(current_buffer, current_buffer->cursor);
-}
+    u32 command_length = buffer_get_line(current_buffer, command_raw, sizeof(command_raw) - 1, &_ignored);
+	command_raw[command_length] = 0;
 
-COMMAND(delete_backwards) {
-	buffer_delete_backwards(current_buffer, current_buffer->cursor);
-}
+    if (command_raw[0] != ':') {
+        return;
+    }
 
-COMMAND(cursor_back) {
-	current_buffer->cursor = cursor_back(current_buffer, current_buffer->cursor);
-}
+    /* s test.txt */
+    char tokens[MAX_TOKENS][MAX_TOKEN_LENGTH];
+    u32 token_start = 1;
+    u32 token_count = 0;
+    u32 pos = 1;
 
-COMMAND(cursor_next) {
-	current_buffer->cursor = cursor_next(current_buffer, current_buffer->cursor);
-}
+    /* TODO: handle multiple widespaces better */
 
-COMMAND(next_line) {
-	Buffer *buffer = current_buffer;
-	u32 column = cursor_get_column(buffer, buffer->cursor);
-	u32 beginning_of_next_line = cursor_get_beginning_of_next_line(buffer, buffer->cursor);
-	u32 next_line_length = buffer_line_length(buffer, beginning_of_next_line);
+    while (pos < command_length) {
+        char c = command_raw[pos];
 
-	buffer_set_cursor(buffer, beginning_of_next_line + MIN(next_line_length, column));
-}
+        if (c == ' ') {
+            u32 token_length = pos - token_start;
+            memcpy(tokens[token_count], command_raw + token_start, token_length);
+            tokens[token_count][token_length] = 0;
 
-COMMAND(prev_line) {
-	Buffer *buffer = current_buffer;
-	u32 column = cursor_get_column(buffer, buffer->cursor);
-	u32 beginning_of_prev_line = cursor_get_beginning_of_prev_line(buffer, buffer->cursor);
-	u32 prev_line_length = buffer_line_length(buffer, beginning_of_prev_line);
+            token_count++;
 
-	buffer_set_cursor(buffer, beginning_of_prev_line + MIN(prev_line_length, column));
-}
+            token_start = pos + 1;
+        }
 
-COMMAND(insert_new_line) {
-	buffer_insert(current_buffer, current_buffer->cursor, '\n');
-}
+        pos++;
+    }
 
-COMMAND(goto_beginning_of_line) {
-	current_buffer->cursor = cursor_get_beginning_of_line(current_buffer, current_buffer->cursor);
-	current_buffer->mode = MODE_INSERT;
-}
+    u32 token_length = pos - token_start;
+    if (token_length > 0) {
+        memcpy(tokens[token_count], command_raw + token_start, token_length);
+        tokens[token_count][token_length] = 0;
 
-COMMAND(goto_end_of_line) {
-	current_buffer->cursor = cursor_get_end_of_line(current_buffer, current_buffer->cursor);
-	current_buffer->mode = MODE_INSERT;
-}
+        token_count++;
+    }
 
-COMMAND(reload_buffer) {
-	read_file_to_buffer(current_buffer);
-}
+    if (token_count > 0) {
+        char *cmd = tokens[0];
 
-COMMAND(save_buffer) {
-	write_buffer_to_file(current_buffer);
-}
-
-COMMAND(insert_mode) {
-	current_buffer->mode = MODE_INSERT;
-}
-
-COMMAND(insert_mode_next) {
-	current_buffer->mode = MODE_INSERT;
-	current_buffer->cursor = cursor_next(current_buffer, current_buffer->cursor);
-}
-
-COMMAND(normal_mode) {
-	current_buffer->mode = MODE_NORMAL;
-}
-
-COMMAND(goto_buffer_begin) {
-	current_buffer->cursor = 0;
-}
-
-COMMAND(goto_buffer_end) {
-	current_buffer->cursor = buffer_length(current_buffer);
-}
-
-COMMAND(new_line_before) {
-	command_fn_goto_beginning_of_line();
-	command_fn_insert_new_line();
-}
-
-COMMAND(new_line_after) {
-	command_fn_goto_end_of_line();
-	command_fn_insert_new_line();
-}
-
-COMMAND(window_operation) {
-	current_buffer->mode = MODE_WINDOW_OPERATION;
-}
-
-COMMAND(next_pane) {
-	if (active_pane->child) {
-		active_pane = active_pane->child;
-	}
-
-	current_buffer = active_pane->buffer;
-	current_buffer->mode = MODE_NORMAL;
-}
-
-COMMAND(prev_pane) {
-	if (active_pane->parent) {
-		active_pane = active_pane->parent;
-	}
-
-	current_buffer = active_pane->buffer;
-	current_buffer->mode = MODE_NORMAL;
-}
-
-COMMAND(split_vertically) {
-	pane_split_vertically();
-	active_pane = active_pane->child;
-	current_buffer->mode = MODE_NORMAL;
-}
-
-COMMAND(split_horizontally) {
-	pane_split_horizontally();
-	active_pane = active_pane->child;
-	current_buffer->mode = MODE_NORMAL;
-}
-
-COMMAND(show_settings) {
-	settings.show = !settings.show;
-}
-
-COMMAND(quit) {
-	shin_exit();
-}
-
-Command *keymap_get_command(Keymap *keymap, u16 key_comb) {
-	assert(key_comb < MAX_KEY_COMBINATIONS);
-	return keymap->commands + key_comb;
-}
-
-Keymap *keymap_create_empty() {
-	Keymap *keymap = (Keymap *) malloc(sizeof(Keymap));
-
-	for (u32 i = 0; i < MAX_KEY_COMBINATIONS; ++i) {
-		keymap->commands[i] = command_null;
-	}
-
-	return keymap;
-}
-
-void keymap_dispatch_event(Keymap *keymap, InputEvent event) {
-	if (event.type == INPUT_EVENT_PRESSED) {
-		Command *command = keymap_get_command(keymap, event.key_comb);
-		command->function();
-	}
+        command_execute(cmd, tokens + 1, token_count - 1);
+    }
 }

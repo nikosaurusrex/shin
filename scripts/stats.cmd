@@ -1,6 +1,8 @@
 @echo off
 setlocal
 
+pushd ../
+
 rem code statistics
 @echo.
 @echo -----------
@@ -19,3 +21,5 @@ findstr -n -i -l "static" %Wildcard%
 @echo.
 @echo -----------
 @echo.
+
+popd

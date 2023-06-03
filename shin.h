@@ -25,12 +25,11 @@ typedef uint64_t u64;
 typedef float f32;
 typedef double f64;
 
-typedef void (*CommandFunction)();
-
 enum Mode {
 	MODE_INSERT = 0,
 	MODE_NORMAL = 1,
 	MODE_WINDOW_OPERATION = 2,
+	MODE_COMMAND = 3,
 	MODES_COUNT
 };
 
@@ -54,13 +53,14 @@ enum InputEventType {
 	INPUT_EVENT_RELEASED
 };
 
-struct Command {
+typedef void (*ShortcutFunction)();
+struct Shortcut {
 	const char *name;
-	CommandFunction function;
+	ShortcutFunction function;
 };
 
 struct Keymap {
-	Command commands[MAX_KEY_COMBINATIONS];
+	Shortcut shortcuts[MAX_KEY_COMBINATIONS];
 };
 
 struct InputEvent {
@@ -101,7 +101,6 @@ struct Settings {
 
 void read_file_to_buffer(Buffer *buffer);
 void write_buffer_to_file(Buffer *buffer);
-void shin_exit();
 
 /* TODO: Clean up globals */
 static Buffer *current_buffer;
@@ -112,7 +111,9 @@ static Pane pane_pool[MAX_PANES];
 static u32 pane_count = 0;
 static Pane *active_pane;
 static Pane *root_pane;
+static Pane *command_pane;
 
 static Keymap *keymaps[MODES_COUNT];
 
 static Settings settings;
+static bool global_running = true;

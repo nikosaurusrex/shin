@@ -1,6 +1,7 @@
 #include "shin.h"
 #include "buffer.cpp"
 #include "commands.cpp"
+#include "shortcuts.cpp"
 
 #ifdef _WIN32
 #define GLEW_STATIC
@@ -68,6 +69,8 @@ struct Renderer {
 };
 
 void read_file_to_buffer(Buffer *buffer) {
+	if (buffer->file_path == 0) return;
+
 	FILE *file = fopen(buffer->file_path, "rb");
 	if (!file) return;
 
@@ -86,6 +89,8 @@ void read_file_to_buffer(Buffer *buffer) {
 }
 
 void write_buffer_to_file(Buffer *buffer) {
+	if (buffer->file_path == 0) return;
+	
 	FILE *file = fopen(buffer->file_path, "w");
 
 	if (!file) return;
@@ -103,65 +108,75 @@ u32 color_hex_from_rgb(f32 rgb[3]) {
 	return r | g | b;
 }
 
-void shin_exit() {
-	/* TODO: exit */
-	// PostQuitMessage(0);
-}
-
 void create_default_keymaps() {
 	// insert keymap
 	Keymap *keymap = keymap_create_empty();
 
 	for (char ch = ' '; ch <= '~'; ++ch) {
-		keymap->commands[ch] = command_insert_char;
-		keymap->commands[ch | SHIFT] = command_insert_char;
+		keymap->shortcuts[ch] = shortcut_insert_char;
+		keymap->shortcuts[ch | SHIFT] = shortcut_insert_char;
 	}
-	keymap->commands[GLFW_KEY_ENTER] = command_insert_new_line;
-	keymap->commands[GLFW_KEY_DELETE] = command_delete_forwards;
-	keymap->commands[GLFW_KEY_BACKSPACE] = command_delete_backwards;
-	keymap->commands[GLFW_KEY_LEFT] = command_cursor_back;
-	keymap->commands[GLFW_KEY_RIGHT] = command_cursor_next;
-	keymap->commands[GLFW_KEY_F4 | ALT] = command_quit;
-	keymap->commands['S' | CTRL] = command_save_buffer;
-	keymap->commands['R' | CTRL] = command_reload_buffer;
-	keymap->commands[GLFW_KEY_ESCAPE] = command_normal_mode;
+	keymap->shortcuts[GLFW_KEY_ENTER] = shortcut_insert_new_line;
+	keymap->shortcuts[GLFW_KEY_DELETE] = shortcut_delete_forwards;
+	keymap->shortcuts[GLFW_KEY_BACKSPACE] = shortcut_delete_backwards;
+	keymap->shortcuts[GLFW_KEY_LEFT] = shortcut_cursor_back;
+	keymap->shortcuts[GLFW_KEY_RIGHT] = shortcut_cursor_next;
+	keymap->shortcuts[GLFW_KEY_F4 | ALT] = shortcut_quit;
+	keymap->shortcuts[GLFW_KEY_ESCAPE] = shortcut_normal_mode;
 
 	keymaps[MODE_INSERT] = keymap;
 	
-// normal keymap
+	// normal keymap
 	keymap = keymap_create_empty();
-	keymap->commands['X'] = command_delete_forwards;
-	keymap->commands['H'] = command_cursor_back;
-	keymap->commands['L'] = command_cursor_next;
-	keymap->commands['J'] = command_next_line;
-	keymap->commands['K'] = command_prev_line;
-	keymap->commands['I' | SHIFT] = command_goto_beginning_of_line;
-	keymap->commands['A' | SHIFT] = command_goto_end_of_line;
-	keymap->commands[GLFW_KEY_F4 | ALT] = command_quit;
-	keymap->commands['S' | CTRL] = command_save_buffer;
-	keymap->commands['R' | CTRL] = command_reload_buffer;
-	keymap->commands['I'] = command_insert_mode;
-	keymap->commands['A'] = command_insert_mode_next;
-	keymap->commands['O'] = command_new_line_after;
-	keymap->commands['O' | SHIFT] = command_new_line_before;
-	keymap->commands['G' | SHIFT] = command_goto_buffer_end;
-	keymap->commands['W' | CTRL] = command_window_operation;
-	keymap->commands[GLFW_KEY_F3] = command_show_settings;
+	keymap->shortcuts['X'] = shortcut_delete_forwards;
+	keymap->shortcuts['H'] = shortcut_cursor_back;
+	keymap->shortcuts['L'] = shortcut_cursor_next;
+	keymap->shortcuts['J'] = shortcut_next_line;
+	keymap->shortcuts['K'] = shortcut_prev_line;
+	keymap->shortcuts['I' | SHIFT] = shortcut_goto_beginning_of_line;
+	keymap->shortcuts['A' | SHIFT] = shortcut_goto_end_of_line;
+	keymap->shortcuts[GLFW_KEY_F4 | ALT] = shortcut_quit;
+	keymap->shortcuts['I'] = shortcut_insert_mode;
+	keymap->shortcuts['A'] = shortcut_insert_mode_next;
+	keymap->shortcuts['O'] = shortcut_new_line_after;
+	keymap->shortcuts['O' | SHIFT] = shortcut_new_line_before;
+	keymap->shortcuts['G' | SHIFT] = shortcut_goto_buffer_end;
+	keymap->shortcuts['W' | CTRL] = shortcut_window_operation;
+	keymap->shortcuts[GLFW_KEY_F3] = shortcut_show_settings;
+	keymap->shortcuts[':' | SHIFT] = shortcut_begin_command;
 	// TODO: fix wrong binding
-	keymap->commands['G'] = command_goto_buffer_begin;
+	keymap->shortcuts['G'] = shortcut_goto_buffer_begin;
 
 	keymaps[MODE_NORMAL] = keymap;
 	
+	// window operation
 	keymap = keymap_create_empty();
-	keymap->commands['H' | CTRL] = command_prev_pane;
-	keymap->commands['H'] = command_prev_pane;
-	keymap->commands['L' | CTRL] = command_next_pane;
-	keymap->commands['L'] = command_next_pane;
-	keymap->commands['V' | CTRL] = command_split_vertically;
-	keymap->commands['V'] = command_split_vertically;
-	keymap->commands['S' | CTRL] = command_split_horizontally;
-	keymap->commands['S'] = command_split_horizontally;
+	keymap->shortcuts['H' | CTRL] = shortcut_prev_pane;
+	keymap->shortcuts['H'] = shortcut_prev_pane;
+	keymap->shortcuts['L' | CTRL] = shortcut_next_pane;
+	keymap->shortcuts['L'] = shortcut_next_pane;
+	keymap->shortcuts['V' | CTRL] = shortcut_split_vertically;
+	keymap->shortcuts['V'] = shortcut_split_vertically;
+	keymap->shortcuts['S' | CTRL] = shortcut_split_horizontally;
+	keymap->shortcuts['S'] = shortcut_split_horizontally;
 	keymaps[MODE_WINDOW_OPERATION] = keymap;
+	
+	// command keymap
+	keymap = keymap_create_empty();
+
+	for (char ch = ' '; ch <= '~'; ++ch) {
+		keymap->shortcuts[ch] = shortcut_insert_char;
+		keymap->shortcuts[ch | SHIFT] = shortcut_insert_char;
+	}
+	keymap->shortcuts[GLFW_KEY_ENTER] = shortcut_insert_new_line;
+	keymap->shortcuts[GLFW_KEY_DELETE] = shortcut_delete_forwards;
+	keymap->shortcuts[GLFW_KEY_BACKSPACE] = shortcut_delete_backwards;
+	keymap->shortcuts[GLFW_KEY_LEFT] = shortcut_cursor_back;
+	keymap->shortcuts[GLFW_KEY_RIGHT] = shortcut_cursor_next;
+	keymap->shortcuts[GLFW_KEY_ENTER] = shortcut_command_confirm;
+	keymap->shortcuts[GLFW_KEY_ESCAPE] = shortcut_normal_mode;
+
+	keymaps[MODE_COMMAND] = keymap;
 }
 
 char *read_entire_file(const char *file_path) {
@@ -445,11 +460,18 @@ void draw_buffer_resize(Renderer *renderer) {
 	buffer->cells = (Cell *) realloc(buffer->cells, buffer->cells_size);
 
 	/* TODO: Layout management */
+
+	Bounds *command_bounds = &command_pane->bounds;
+	command_bounds->left = 0;
+	command_bounds->top = buffer->rows - 1;
+	command_bounds->width = buffer->columns;
+	command_bounds->height = 1;
+
 	Bounds *bounds = &active_pane->bounds;
 	bounds->left = 0;
 	bounds->top = 0;
 	bounds->width = buffer->columns;
-	bounds->height = buffer->rows;
+	bounds->height = buffer->rows - 1;
 
 	glUniform2ui(renderer->shader_cell_size_slot, metrics.glyph_width, metrics.glyph_height);
 	glUniform2ui(renderer->shader_win_size_slot, width, height);
@@ -558,10 +580,9 @@ void renderer_render_panes(Renderer *renderer) {
 
 	memset(draw_buffer->cells, 0, draw_buffer->cells_size);
 
-	Pane *pane = root_pane;
-	while (pane) {
-		renderer_render(renderer, pane);
-		pane = pane->child;
+
+	for (u32 i = 0; i < pane_count; ++i) {
+		renderer_render(renderer, &pane_pool[i]);
 	}
 }
 
@@ -592,8 +613,12 @@ int main() {
 	settings.fg = 0xFFFFFF;
 	settings.fg_temp[0] = settings.fg_temp[1] = settings.fg_temp[2] = 1.0f;
 
+	Buffer *command_buffer = buffer_create(32);
+	command_buffer->mode = MODE_COMMAND;
+	command_pane = pane_create(0, {0, 0, 0, 0}, command_buffer);
+
 	current_buffer = buffer_create(32);
-	current_buffer->file_path = (char *) "test.txt";
+	current_buffer->file_path = 0;
 	pane_create(0, {0, 0, 30, 20}, current_buffer);
 	root_pane = active_pane;
 
@@ -616,7 +641,7 @@ int main() {
 
 	f64 prev_time = glfwGetTime();
 	u32 frames = 0;
-	while (!glfwWindowShouldClose(window)) {
+	while (!glfwWindowShouldClose(window) && global_running) {
 		glfwPollEvents();
 
 		f64 current_time = glfwGetTime();
