@@ -26,7 +26,7 @@ void highlighting_parse(Pane *pane) {
             u32 id_index = 0;
 			u32 start = pos;
 
-			while (isalnum(c) || c == '_' && pos < len) {
+			while ((isalnum(c) || c == '_') && pos < len) {
 				id[id_index++] = c;
 				pos = cursor_next(buffer, pos);
 				c = buffer_get_char(buffer, pos);
@@ -66,6 +66,30 @@ void highlighting_parse(Pane *pane) {
 			}
 
 			pane->highlights.add({start, pos, COLOR_STRING});
+			pos++;
+		} else if (c == '<') {
+			u32 start = pos;
+
+			pos = cursor_next(buffer, pos);
+			c = buffer_get_char(buffer, pos);
+			while (c != '>' && pos < len) {
+				pos = cursor_next(buffer, pos);
+				c = buffer_get_char(buffer, pos);
+			}
+
+			pane->highlights.add({start, pos, COLOR_DIRECTIVE});
+			pos++;
+		} else if (c == '#') {
+			u32 start = pos;
+
+			pos = cursor_next(buffer, pos);
+			c = buffer_get_char(buffer, pos);
+			while ((isalnum(c) || c == '_') && pos < len) {
+				pos = cursor_next(buffer, pos);
+				c = buffer_get_char(buffer, pos);
+			}
+
+			pane->highlights.add({start, pos, COLOR_DIRECTIVE});
 			pos++;
 		} else if (isspace(c)) {
 			pos++;

@@ -7,6 +7,10 @@
 #define ALT   (1 << 9)
 #define SHIFT (1 << 10)
 
+#define MAX_MULTI_SHORTCUT_LENGTH 12
+static char multi_shortcut_buffer[MAX_MULTI_SHORTCUT_LENGTH];
+static u32 multi_shortcut_index = 0;
+
 SHORTCUT(null) {
 	
 }
@@ -193,6 +197,54 @@ SHORTCUT(command_exit) {
 
 SHORTCUT(quit) {
 	global_running = false;
+}
+
+SHORTCUT(start_multi_key_shortcut) {
+	multi_shortcut_index = 0;
+	multi_shortcut_buffer[multi_shortcut_index++] = last_input_event.ch;
+	multi_shortcut_buffer[multi_shortcut_index] = 0;
+	current_buffer->mode = MODE_MULTIKEY_SHORTCUT;
+}
+
+SHORTCUT(multi_key_insert) {
+	if (multi_shortcut_index + 1 >= MAX_MULTI_SHORTCUT_LENGTH) {
+		return;
+	}
+
+	multi_shortcut_buffer[multi_shortcut_index++] = last_input_event.ch;
+	multi_shortcut_buffer[multi_shortcut_index] = 0;
+
+	if (multi_shortcut_buffer[0] == 'g') {
+		if (multi_shortcut_buffer[1] == 'g') {
+			shortcut_fn_goto_buffer_begin();
+			shortcut_fn_normal_mode(); 
+		}
+	} else if (multi_shortcut_buffer[0] == 'd') {
+		if (multi_shortcut_buffer[1] == 'd') {
+			u32 from = cursor_get_beginning_of_line(current_buffer, current_buffer->cursor);
+			u32 to = cursor_get_beginning_of_next_line(current_buffer, current_buffer->cursor);
+			
+			buffer_delete_multiple(current_buffer, from, (to - from));
+			
+			shortcut_fn_normal_mode(); 
+		} else if (multi_shortcut_buffer[1] == 'w') {
+			u32 from = current_buffer->cursor;
+			u32 to = cursor_get_next_word(current_buffer, current_buffer->cursor);
+
+			buffer_delete_multiple(current_buffer, from, (to - from));
+
+			shortcut_fn_normal_mode(); 
+		}
+	} else if (multi_shortcut_buffer[0] == 'c') {
+		if (multi_shortcut_buffer[1] == 'w') {
+			u32 from = current_buffer->cursor;
+			u32 to = cursor_get_end_of_word(current_buffer, current_buffer->cursor);
+
+			buffer_delete_multiple(current_buffer, from, (to - from) + 1);
+
+			shortcut_fn_insert_mode(); 
+		}
+	}
 }
 
 Shortcut *keymap_get_shortcut(Keymap *keymap, u16 key_comb) {

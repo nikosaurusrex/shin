@@ -1,5 +1,5 @@
 cleanup globals
-implement more commands like w,e,b, goto-line, search, { }
+implement more commands like goto-line, search, { }
 32j, 32k and so on...
 
 layout management

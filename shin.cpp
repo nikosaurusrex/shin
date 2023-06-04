@@ -121,6 +121,7 @@ void create_default_keymaps() {
 	keymap->shortcuts[GLFW_KEY_TAB] = shortcut_insert_tab;
 	keymap->shortcuts[GLFW_KEY_DELETE] = shortcut_delete_forwards;
 	keymap->shortcuts[GLFW_KEY_BACKSPACE] = shortcut_delete_backwards;
+	keymap->shortcuts[GLFW_KEY_BACKSPACE | SHIFT] = shortcut_delete_backwards;
 	keymap->shortcuts[GLFW_KEY_LEFT] = shortcut_cursor_back;
 	keymap->shortcuts[GLFW_KEY_RIGHT] = shortcut_cursor_next;
 	keymap->shortcuts[GLFW_KEY_F4 | ALT] = shortcut_quit;
@@ -149,8 +150,9 @@ void create_default_keymaps() {
 	keymap->shortcuts['W' | CTRL] = shortcut_window_operation;
 	keymap->shortcuts[GLFW_KEY_F3] = shortcut_show_settings;
 	keymap->shortcuts[':' | SHIFT] = shortcut_begin_command;
-	// TODO: fix wrong binding
-	keymap->shortcuts['G'] = shortcut_goto_buffer_begin;
+	keymap->shortcuts['G'] = shortcut_start_multi_key_shortcut;
+	keymap->shortcuts['C'] = shortcut_start_multi_key_shortcut;
+	keymap->shortcuts['D'] = shortcut_start_multi_key_shortcut;
 
 	keymaps[MODE_NORMAL] = keymap;
 	
@@ -182,6 +184,17 @@ void create_default_keymaps() {
 	keymap->shortcuts[GLFW_KEY_ESCAPE] = shortcut_command_exit;
 
 	keymaps[MODE_COMMAND] = keymap;
+
+	// multikey shortcut keymap
+	keymap = keymap_create_empty();
+
+	for (char ch = ' '; ch <= '~'; ++ch) {
+		keymap->shortcuts[ch] = shortcut_multi_key_insert;
+		keymap->shortcuts[ch | SHIFT] = shortcut_multi_key_insert;
+	}
+	keymap->shortcuts[GLFW_KEY_ESCAPE] = shortcut_normal_mode;
+
+	keymaps[MODE_MULTIKEY_SHORTCUT] = keymap;
 }
 
 char *read_entire_file(const char *file_path) {
@@ -577,6 +590,10 @@ void renderer_render(Renderer *renderer, Pane *pane) {
 
 			if (has_highlights) {
 				bool in_highlight = highlight.start <= highlight_cursor && highlight_cursor <= highlight.end;
+				if (in_highlight) {
+					cell->foreground = settings.colors[highlight.color_index];
+				}
+				
 				if (highlight_cursor == highlight.end) {
 					highlight_index++;
 					if (highlight_index < pane->highlights.length) {
@@ -585,10 +602,8 @@ void renderer_render(Renderer *renderer, Pane *pane) {
 						has_highlights = false;
 					}
 				}
+				
 				highlight_cursor++;
-				if (in_highlight) {
-					cell->foreground = settings.colors[highlight.color_index];
-				}
 			}
 
 			if (ch == '\t') {

@@ -163,6 +163,23 @@ void buffer_delete_backwards(Buffer *buffer, u32 pos) {
 	}
 }
 
+void buffer_delete_multiple(Buffer *buffer, u32 pos, u32 count) {
+	buffer_asserts(buffer);
+
+	if (pos < buffer_length(buffer)) {
+		buffer_shift_gap_to_position(buffer, pos);
+		buffer->gap_end += count;
+
+		if (buffer->cursor > pos) {
+			u32 new_cursor = buffer->cursor - count;
+			if (new_cursor < pos) {
+				new_cursor = pos;
+			}
+			buffer->cursor = new_cursor;
+		}
+	}
+}
+
 u32 cursor_next(Buffer *buffer, u32 cursor) {
 	buffer_asserts(buffer);
 
@@ -242,6 +259,10 @@ INLINE u32 cursor_get_column(Buffer *buffer, u32 cursor) {
 u32 cursor_get_beginning_of_word(Buffer *buffer, u32 cursor) {
 	while (cursor > 0 && !isspace(buffer_get_char(buffer, cursor))) {
 		cursor--;
+	}
+
+	if (cursor == 0) {
+		return 0;
 	}
 
 	return cursor + 1;
