@@ -26,6 +26,105 @@ typedef uint64_t u64;
 typedef float f32;
 typedef double f64;
 
+template<typename T>
+struct Array {
+    T *data = 0;
+    s64 length = 0;
+    s64 allocated = 0;
+    
+    const int NEW_MEM_CHUNK_ELEMENT_COUNT =  16;
+    
+    Array(s64 reserve_amount = 0) {
+        reserve(reserve_amount);
+    }
+    
+    ~Array() {
+        reset();
+    }
+    
+    void reserve(s64 amount) {
+        if (amount <= 0) amount = NEW_MEM_CHUNK_ELEMENT_COUNT;
+        if (amount <= allocated) return;
+        
+        T *new_mem = (T *)malloc(amount * sizeof(T));
+        
+        if (data) {
+            memcpy(new_mem, data, length * sizeof(T));
+            free(data);
+        }
+        
+        data = new_mem;
+        allocated = amount;
+    }
+    
+    void resize(s64 amount) {
+        reserve(amount);
+        length = amount;
+    }
+    
+    void add(T element) {
+        if (length+1 >= allocated) reserve(allocated * 2);
+        
+        data[length] = element;
+        length += 1;
+    }
+    
+    T unordered_remove(s64 index) {
+        assert(index >= 0 && index < length);
+        assert(length);
+        
+        T last = pop();
+        if (index < length) {
+            (*this)[index] = last;
+        }
+        
+        return last;
+    }
+
+    T ordered_remove(s64 index) {
+        assert(index >= 0 && index < length);
+        assert(length);
+
+        T item = (*this)[index];
+        memmove(data + index, data + index + 1, ((length - index) - 1) * sizeof(T));
+
+        length--;
+        return item;
+    }
+    
+    T pop() {
+        assert(length > 0);
+        T result = data[length-1];
+        length -= 1;
+        return result;
+    }
+    
+    void clear() {
+        length = 0;
+    }
+    
+    void reset() {
+        length = 0;
+        allocated = 0;
+        
+        if (data) free(data);
+        data = 0;
+    }
+    
+    T &operator[] (s64 index) {
+        assert(index >= 0 && index < length);
+        return data[index];
+    }
+    
+    T *begin() {
+        return &data[0];
+    }
+    
+    T *end() {
+        return &data[length];
+    }
+};
+
 enum Mode {
 	MODE_INSERT = 0,
 	MODE_NORMAL = 1,
@@ -88,9 +187,15 @@ struct Pane {
 	Pane *child;
 };
 
+enum ColorPalette : u32 {
+	COLOR_BG = 0,	
+	COLOR_FG,
+	COLOR_KEYWORD,
+	COLOR_COUNT
+};
+
 struct Settings {
-	u32 bg;
-	u32 fg;
+	u32 colors[COLOR_COUNT];
 	bool vsync;
 	u32 tab_width;
 

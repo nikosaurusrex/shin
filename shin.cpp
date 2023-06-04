@@ -2,6 +2,7 @@
 #include "buffer.cpp"
 #include "commands.cpp"
 #include "shortcuts.cpp"
+#include "highlighting.cpp"
 
 #ifdef _WIN32
 #define GLEW_STATIC
@@ -541,6 +542,9 @@ void renderer_render(Renderer *renderer, Pane *pane) {
 	bool has_drawn_cursor = false;
 	bool is_active_pane = pane == active_pane;
 
+	u32 highlight_index = 0;
+	u32 highlight_cursor = 0;
+
 	for (pos = start; pos < buffer_length(buffer) && lines_drawn < bounds.height; pos = cursor_next(buffer, pos)) {
 		u32 prev_pos = pos;
 
@@ -557,14 +561,37 @@ void renderer_render(Renderer *renderer, Pane *pane) {
 		u32 render_x = bounds.left;
 		u32 render_y = bounds.top + lines_drawn;
 
+		bool has_highlights = highlight_index < highlights.length;
+		Highlight highlight;
+		if (has_highlights) {
+			highlight = highlights[highlight_index];
+			highlight_cursor = prev_pos;
+		}
+
 		for (u32 i = 0; i < draw_line_length; ++i) {
 			char ch = line[i];
 			Cell *cell = &draw_buffer->cells[render_x + render_y * draw_buffer->columns];
 
 			cell->glyph_index = ch - 32;
-			cell->foreground = settings.fg;
-			cell->background = settings.bg;
+			cell->background = settings.colors[COLOR_BG];
+			cell->foreground = settings.colors[COLOR_FG];
 			cell->glyph_mode = GLYPH_MODE_NORMAL;
+
+			if (has_highlights) {
+				bool in_highlight = highlight.start <= highlight_cursor && highlight_cursor <= highlight.end;
+				if (highlight_cursor == highlight.end) {
+					highlight_index++;
+					if (highlight_index < highlights.length) {
+						highlight = highlights[highlight_index];
+					} else {
+						has_highlights = false;
+					}
+				}
+				highlight_cursor++;
+				if (in_highlight) {
+					cell->foreground = settings.colors[highlight.color_index];
+				}
+			}
 
 			if (ch == '\t') {
 				render_x += settings.tab_width;
@@ -620,8 +647,8 @@ void render_settings_window(GLFWwindow *window) {
 	ImGui::ColorEdit3("Foreground color", settings.fg_temp, ImGuiColorEditFlags_NoInputs);
 	ImGui::Checkbox("Vsync", &settings.vsync);
 
-	settings.bg = color_hex_from_rgb(settings.bg_temp);
-	settings.fg = color_hex_from_rgb(settings.fg_temp);
+	settings.colors[COLOR_BG] = color_hex_from_rgb(settings.bg_temp);
+	settings.colors[COLOR_FG] = color_hex_from_rgb(settings.fg_temp);
 
 	glfwSwapInterval(settings.vsync ? 1 : 0);
 
@@ -631,7 +658,10 @@ void render_settings_window(GLFWwindow *window) {
 int main() {
 	create_default_keymaps();
 
-	settings.fg = 0xFFFFFF;
+	settings.colors[COLOR_BG] = 0x000000;
+	settings.colors[COLOR_FG] = 0xFFFFFF;
+	settings.colors[COLOR_KEYWORD] = 0xFF0000;
+
 	settings.fg_temp[0] = settings.fg_temp[1] = settings.fg_temp[2] = 1.0f;
 	settings.tab_width = 4;
 
@@ -676,6 +706,9 @@ int main() {
 			glfwSetWindowTitle(window, title);
 
 			frames = 0;
+
+			/* TODO: decide time interval, make setting */
+			highlighting_parse();
 
 			prev_time = current_time;
 		}

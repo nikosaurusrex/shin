@@ -8,7 +8,7 @@
 #define SHIFT (1 << 10)
 
 SHORTCUT(null) {
-	// shin_beep();
+	
 }
 
 SHORTCUT(insert_char) {
