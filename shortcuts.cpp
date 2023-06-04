@@ -122,6 +122,8 @@ SHORTCUT(goto_buffer_end) {
 SHORTCUT(new_line_before) {
 	shortcut_fn_goto_beginning_of_line();
 	shortcut_fn_insert_new_line();
+	
+	current_buffer->cursor = cursor_get_end_of_prev_line(current_buffer, current_buffer->cursor);
 }
 
 SHORTCUT(new_line_after) {
@@ -176,6 +178,13 @@ SHORTCUT(begin_command) {
 
 SHORTCUT(command_confirm) {
 	command_parse_and_run();
+    buffer_clear(current_buffer);
+
+	active_pane = command_pane->parent;
+	current_buffer = active_pane->buffer;
+}
+
+SHORTCUT(command_exit) {
     buffer_clear(current_buffer);
 
 	active_pane = command_pane->parent;

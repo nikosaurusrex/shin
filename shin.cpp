@@ -179,7 +179,7 @@ void create_default_keymaps() {
 	keymap->shortcuts[GLFW_KEY_LEFT] = shortcut_cursor_back;
 	keymap->shortcuts[GLFW_KEY_RIGHT] = shortcut_cursor_next;
 	keymap->shortcuts[GLFW_KEY_ENTER] = shortcut_command_confirm;
-	keymap->shortcuts[GLFW_KEY_ESCAPE] = shortcut_normal_mode;
+	keymap->shortcuts[GLFW_KEY_ESCAPE] = shortcut_command_exit;
 
 	keymaps[MODE_COMMAND] = keymap;
 }
@@ -626,6 +626,10 @@ void renderer_render_panes(Renderer *renderer) {
 
 	memset(draw_buffer->cells, 0, draw_buffer->cells_size);
 
+	if (active_pane != command_pane) {
+		highlighting_parse(active_pane);
+	}
+
 	for (u32 i = 0; i < pane_count; ++i) {
 		Pane *pane = &pane_pool[i];
 		pane_update_scroll(pane);
@@ -660,6 +664,9 @@ int main() {
 	settings.colors[COLOR_BG] = 0x000000;
 	settings.colors[COLOR_FG] = 0xFFFFFF;
 	settings.colors[COLOR_KEYWORD] = 0xFF0000;
+	settings.colors[COLOR_DIRECTIVE] = 0xFFFF00;
+	settings.colors[COLOR_NUMBER] = 0x0000FF;
+	settings.colors[COLOR_STRING] = 0x00FF00;
 
 	settings.fg_temp[0] = settings.fg_temp[1] = settings.fg_temp[2] = 1.0f;
 	settings.tab_width = 4;
@@ -705,11 +712,6 @@ int main() {
 			glfwSetWindowTitle(window, title);
 
 			frames = 0;
-
-			/* TODO: decide time interval, make setting */
-			if (active_pane != command_pane) {
-				highlighting_parse(active_pane);
-			}
 
 			prev_time = current_time;
 		}
