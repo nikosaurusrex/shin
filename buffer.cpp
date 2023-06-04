@@ -295,11 +295,6 @@ Pane *pane_create(Pane *parent, Bounds bounds, Buffer *buffer) {
 	return pane;
 }
 
-void pane_destroy(Pane *pane) {
-	pane_pool[pane - pane_pool] = pane[pane_count - 1];
-	pane_count--;
-}
-
 u32 get_line_difference(Buffer *buffer, u32 start, u32 end) {
 	u32 lines = 0;
 	

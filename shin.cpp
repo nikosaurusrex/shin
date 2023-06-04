@@ -531,8 +531,6 @@ void renderer_render(Renderer *renderer, Pane *pane) {
 	Buffer *buffer = pane->buffer;
 	Bounds bounds = pane->bounds;
 
-	pane_update_scroll(pane);
-
 	u32 start = pane->start;
 	u32 lines_drawn = 0;
 	u32 pos;
@@ -561,10 +559,10 @@ void renderer_render(Renderer *renderer, Pane *pane) {
 		u32 render_x = bounds.left;
 		u32 render_y = bounds.top + lines_drawn;
 
-		bool has_highlights = highlight_index < highlights.length;
+		bool has_highlights = highlight_index < pane->highlights.length;
 		Highlight highlight;
 		if (has_highlights) {
-			highlight = highlights[highlight_index];
+			highlight = pane->highlights[highlight_index];
 			highlight_cursor = prev_pos;
 		}
 
@@ -581,8 +579,8 @@ void renderer_render(Renderer *renderer, Pane *pane) {
 				bool in_highlight = highlight.start <= highlight_cursor && highlight_cursor <= highlight.end;
 				if (highlight_cursor == highlight.end) {
 					highlight_index++;
-					if (highlight_index < highlights.length) {
-						highlight = highlights[highlight_index];
+					if (highlight_index < pane->highlights.length) {
+						highlight = pane->highlights[highlight_index];
 					} else {
 						has_highlights = false;
 					}
@@ -628,9 +626,10 @@ void renderer_render_panes(Renderer *renderer) {
 
 	memset(draw_buffer->cells, 0, draw_buffer->cells_size);
 
-
 	for (u32 i = 0; i < pane_count; ++i) {
-		renderer_render(renderer, &pane_pool[i]);
+		Pane *pane = &pane_pool[i];
+		pane_update_scroll(pane);
+		renderer_render(renderer, pane);
 	}
 }
 
@@ -708,7 +707,9 @@ int main() {
 			frames = 0;
 
 			/* TODO: decide time interval, make setting */
-			highlighting_parse();
+			if (active_pane != command_pane) {
+				highlighting_parse(active_pane);
+			}
 
 			prev_time = current_time;
 		}

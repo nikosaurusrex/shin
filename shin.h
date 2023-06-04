@@ -176,8 +176,16 @@ struct Bounds {
 	u32 height;
 };
 
+struct Highlight {
+    u32 start;
+    u32 end;
+    u32 color_index;
+};
+
+
 struct Pane;
 struct Pane {
+	Array<Highlight> highlights;
 	Bounds bounds;
 	Buffer *buffer;
 	u32 start;
