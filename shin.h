@@ -203,6 +203,8 @@ enum ColorPalette : u32 {
 	COLOR_DIRECTIVE,
 	COLOR_NUMBER,
 	COLOR_STRING,
+	COLOR_TYPE,
+	COLOR_COMMENT,
 	COLOR_COUNT
 };
 
@@ -216,6 +218,12 @@ struct Settings {
 	/* TODO: maybe rework this later */
 	f32 bg_temp[3];
 	f32 fg_temp[3];
+	f32 keyword_temp[3];
+	f32 directive_temp[3];
+	f32 number_temp[3];
+	f32 string_temp[3];
+	f32 type_temp[3];
+	f32 comment_temp[3];
 };
 
 void read_file_to_buffer(Buffer *buffer);

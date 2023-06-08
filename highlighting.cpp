@@ -2,13 +2,23 @@
 
 /* TODO: better solution */
 const char *KEYWORDS[] = {
-	"auto", "bool", "break", "case", "catch", "char", "char16_t", "char32_t", "wchar_t", "class",
-	"const", "constexpr", "continue", "default", "delete", "do", "double", "dynamic_cast", "static_cast", "const_cast",
-	"else", "enum", "explicit", "extern", "false", "float", "for", "friend", "goto", "if", "inline", "int", "long",
-	"namespace", "new", "nullptr", "operator", "private", "protected", "public", "reinterpret_cast", "return", "short",
-	"signed", "sizeof", "static", "static_assert", "struct", "switch", "template", "this", "thread_local", "throw",
-	"true", "try", "typedef", "union", "unsigned", "using", "virtual", "void", "volatile", "while", "int8_t", "int16_t",
-	"int32_t", "int64_t", "uint8_t", "uint16_t", "uint32_t", "uint64_t"
+	"break", "case", "catch", "continue", "default", "delete", "do", "dynamic_cast",
+	"static_cast", "const_cast", "else", "for", "goto", "if", "friend",
+	"new", "operator", "private", "protected", "public", "reinterpret_cast",
+	"return", "sizeof", "static_assert", "switch", "this", "throw", "try",
+	"using", "while", 
+};
+
+const char *TYPES[] = {
+	"auto", "bool", "char", "char16_t", "char32_t", "wchar_t", "class",
+	"const", "constexpr", "double", "enum", "extern", "float", "int", "long",
+	"inline", "explicit", "namespace", "short", "signed", "static", "template", "thread_local", 
+	"typedef", "union", "unsigned", "virtual", "void", "volatile", "int8_t", "int16_t",
+	"int32_t", "int64_t", "uint8_t", "uint16_t", "uint32_t", "uint64_t", "struct"
+};
+
+const char *CONSTANTS[] = {
+	"NULL", "nullptr", "true", "false"
 };
 
 void highlighting_parse(Pane *pane) {
@@ -33,14 +43,26 @@ void highlighting_parse(Pane *pane) {
 			}
 			id[id_index] = 0;
 
-			u32 keyword_count = sizeof(KEYWORDS) / sizeof(char *);
-			for (u32 i = 0; i < keyword_count; ++i) {
+			for (u32 i = 0; i < sizeof(KEYWORDS) / sizeof(char *); ++i) {
 				if (strcmp(KEYWORDS[i], id) == 0) {
 					pane->highlights.add({start, pos - 1, COLOR_KEYWORD});
 					break;
 				}
 			}
-
+			
+			for (u32 i = 0; i < sizeof(TYPES) / sizeof(char *); ++i) {
+				if (strcmp(TYPES[i], id) == 0) {
+					pane->highlights.add({start, pos - 1, COLOR_TYPE});
+					break;
+				}
+			}
+			
+			for (u32 i = 0; i < sizeof(CONSTANTS) / sizeof(char *); ++i) {
+				if (strcmp(CONSTANTS[i], id) == 0) {
+					pane->highlights.add({start, pos - 1, COLOR_NUMBER});
+					break;
+				}
+			}
 		} else if (isdigit(c)) {
 			u32 start = pos;
 

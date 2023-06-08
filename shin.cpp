@@ -25,8 +25,8 @@
 #define GLYPH_MAP_COUNT_X 32
 #define GLYPH_MAP_COUNT_Y 16
 
-#define GLYPH_MODE_NORMAL 0
-#define GLYPH_MODE_INVERT 1
+#define GLYPH_INVERT 0x1
+#define GLYPH_BLINK 0x2
 
 #define MAX_LINE_LENGTH 256
 
@@ -45,7 +45,7 @@ struct GlyphMap {
 
 struct Cell {
 	u32 glyph_index;
-	u32 glyph_mode;
+	u32 glyph_flags;
 	u32 foreground;
 	u32 background;
 };
@@ -63,10 +63,12 @@ struct Renderer {
 	DrawBuffer buffer;
 
 	GLint shader_glyph_map_slot;
-	GLint shader_cells_slot;
+	GLint shader_cells_ssbo;
 	GLint shader_cell_size_slot;
+	GLint shader_grid_size_slot;
 	GLint shader_win_size_slot;
 	GLint shader_time_slot;
+	GLint shader_background_color_slot;
 };
 
 void read_file_to_buffer(Buffer *buffer) {
@@ -107,6 +109,15 @@ u32 color_hex_from_rgb(f32 rgb[3]) {
 	u32 g = (u32)(rgb[1] * 255.0f) << 8;
 	u32 b = (u32)(rgb[2] * 255.0f);
 	return r | g | b;
+}
+
+void color_set_rgb_from_hex(f32 rgb[3], u32 hex) {
+	u32 r = (hex >> 16) & 0xFF;
+	u32 g = (hex >> 8) & 0xFF;
+	u32 b = hex & 0xFF;
+	rgb[0] = r / 255.0f;
+	rgb[1] = g / 255.0f;
+	rgb[2] = b / 255.0f;
 }
 
 void create_default_keymaps() {
@@ -420,26 +431,37 @@ void shaders_init(Renderer *renderer) {
 	glUseProgram(program);
 
 	renderer->shader_glyph_map_slot = glGetUniformLocation(program, "glyph_map");
-	renderer->shader_cells_slot = glGetUniformLocation(program, "cells");
 	renderer->shader_cell_size_slot = glGetUniformLocation(program, "cell_size");
+	renderer->shader_grid_size_slot = glGetUniformLocation(program, "grid_size");
 	renderer->shader_win_size_slot = glGetUniformLocation(program, "win_size");
 	renderer->shader_time_slot = glGetUniformLocation(program, "time");
+	renderer->shader_background_color_slot = glGetUniformLocation(program, "background_color");
 }
 
-void opengl_create_texture(int id, GLint uniform_slot) {
+void create_glyph_texture(GLint uniform_slot) {
 	GLuint tex;
 
 	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 
 	glGenTextures(1, &tex);
-	glUniform1i(uniform_slot, id);
-	glActiveTexture(GL_TEXTURE0 + id);
+	glUniform1i(uniform_slot, 0);
+	glActiveTexture(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_2D, tex);
 
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+}
+
+u32 create_cells_ssbo() {
+	GLuint ssbo;
+
+	glGenBuffers(1, &ssbo);
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo);
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, ssbo);
+
+	return ssbo;
 }
 
 void glyph_map_update_texture(GlyphMap *glyph_map) {
@@ -458,11 +480,30 @@ void glyph_map_update_texture(GlyphMap *glyph_map) {
 	);
 }
 
+bool checkOpenGLError() {
+    bool found_error = false;
+    int glErr = glGetError();
+    while (glErr != GL_NO_ERROR) {
+        printf("glError: %d\n", glErr);
+        found_error = true;
+        glErr = glGetError();
+    }
+    return found_error;
+}
+
 void query_cell_data(Renderer *renderer) {
 	DrawBuffer *buffer = &renderer->buffer;
-	glActiveTexture(GL_TEXTURE1);
 
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32UI, buffer->columns, buffer->rows, 0, GL_RGBA_INTEGER, GL_UNSIGNED_INT, buffer->cells);
+	checkOpenGLError();
+	glBufferData(GL_SHADER_STORAGE_BUFFER, buffer->cells_size, buffer->cells, GL_DYNAMIC_DRAW);
+
+	checkOpenGLError();
+
+	// glUniform1fv(renderer->shader_cells_slot, buffer->cells_size, (GLfloat *) buffer->cells);
+
+	// glActiveTexture(GL_TEXTURE1);
+
+	// glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32UI, buffer->columns, buffer->rows, 0, GL_RGBA_INTEGER, GL_UNSIGNED_INT, buffer->cells);
 }
 
 void draw_buffer_resize(Renderer *renderer) {
@@ -492,7 +533,9 @@ void draw_buffer_resize(Renderer *renderer) {
 	bounds->height = buffer->rows - 1;
 
 	glUniform2ui(renderer->shader_cell_size_slot, metrics.glyph_width, metrics.glyph_height);
+	glUniform2ui(renderer->shader_grid_size_slot, buffer->columns, buffer->rows);
 	glUniform2ui(renderer->shader_win_size_slot, width, height);
+	glUniform1ui(renderer->shader_background_color_slot, color_hex_from_rgb(settings.bg_temp));
 }
 
 void draw_buffer_init(Renderer *renderer) {
@@ -532,8 +575,11 @@ void renderer_init(Renderer *renderer, GLFWwindow *window) {
 void renderer_init_glyph_map(FT_Library ft, Renderer *renderer) {
 	renderer->glyph_map = glyph_map_create(ft, "resources/consolas.ttf", 20);
 
-	opengl_create_texture(0, renderer->shader_glyph_map_slot);
-	opengl_create_texture(1, renderer->shader_cells_slot);
+	checkOpenGLError();
+	create_glyph_texture(renderer->shader_glyph_map_slot);
+	checkOpenGLError();
+	renderer->shader_cells_ssbo = create_cells_ssbo();
+	checkOpenGLError();
 
 	glyph_map_update_texture(renderer->glyph_map);
 	query_cell_data(renderer);
@@ -557,16 +603,17 @@ void renderer_render(Renderer *renderer, Pane *pane) {
 	u32 highlight_cursor = 0;
 	Highlight highlight;
 	bool has_highlights = highlight_index < pane->highlights.length;
-	if (has_highlights) {
-		highlight = pane->highlights[highlight_index];
-		highlight_cursor = prev_pos;
-	}
 
 	for (pos = start; pos < buffer_length(buffer) && lines_drawn < bounds.height; pos = cursor_next(buffer, pos)) {
 		u32 prev_pos = pos;
 
 		u32 line_length = buffer_get_line(buffer, line, sizeof(line) - 1, &pos);
 		line[line_length] = 0;
+
+		if (has_highlights) {
+			highlight = pane->highlights[highlight_index];
+			highlight_cursor = prev_pos;
+		}
 
 		if (is_active_pane && (prev_pos <= buffer->cursor && buffer->cursor <= pos)
 		) {
@@ -585,7 +632,7 @@ void renderer_render(Renderer *renderer, Pane *pane) {
 			cell->glyph_index = ch - 32;
 			cell->background = settings.colors[COLOR_BG];
 			cell->foreground = settings.colors[COLOR_FG];
-			cell->glyph_mode = GLYPH_MODE_NORMAL;
+			cell->glyph_flags = 0;
 
 			if (has_highlights) {
 				bool in_highlight = highlight.start <= highlight_cursor && highlight_cursor <= highlight.end;
@@ -614,14 +661,14 @@ void renderer_render(Renderer *renderer, Pane *pane) {
 			if (should_draw_cursor) {
 				u32 cursor_buffer_rel_line_pos = buffer->cursor - prev_pos;
 				if (cursor_buffer_rel_line_pos == i) {
-					cell->glyph_mode = GLYPH_MODE_INVERT;
+					cell->glyph_flags = GLYPH_INVERT;
 					has_drawn_cursor = true;
 				}
 			}
 		}
 		
 		if (!has_drawn_cursor && pos == buffer->cursor) {
-			draw_buffer->cells[render_x + render_y * draw_buffer->columns].glyph_mode = GLYPH_MODE_INVERT;
+			draw_buffer->cells[render_x + render_y * draw_buffer->columns].glyph_flags = GLYPH_INVERT;
 			has_drawn_cursor = true;
 		}
 
@@ -629,7 +676,7 @@ void renderer_render(Renderer *renderer, Pane *pane) {
 	}
 
 	if (is_active_pane && !has_drawn_cursor) {
-		draw_buffer->cells[bounds.left + (bounds.top + lines_drawn) * draw_buffer->columns].glyph_mode = GLYPH_MODE_INVERT;
+		draw_buffer->cells[bounds.left + (bounds.top + lines_drawn) * draw_buffer->columns].glyph_flags = GLYPH_INVERT;
 	}
 
 	pane->end = cursor_get_end_of_prev_line(buffer, pos);
@@ -657,33 +704,60 @@ void renderer_end(GLFWwindow *window) {
 	glDrawArrays(GL_TRIANGLES, 0, 6);
 }
 
-void render_settings_window(GLFWwindow *window) {
+void render_settings_window(Renderer *renderer, GLFWwindow *window) {
 	ImGui::Begin("Settings");
 
 	ImGui::ColorEdit3("Background color", settings.bg_temp, ImGuiColorEditFlags_NoInputs);
 	ImGui::ColorEdit3("Foreground color", settings.fg_temp, ImGuiColorEditFlags_NoInputs);
+	ImGui::ColorEdit3("Keyword color", settings.keyword_temp, ImGuiColorEditFlags_NoInputs);
+	ImGui::ColorEdit3("Directive color", settings.directive_temp, ImGuiColorEditFlags_NoInputs);
+	ImGui::ColorEdit3("Number color", settings.number_temp, ImGuiColorEditFlags_NoInputs);
+	ImGui::ColorEdit3("String color", settings.string_temp, ImGuiColorEditFlags_NoInputs);
+	ImGui::ColorEdit3("Type color", settings.type_temp, ImGuiColorEditFlags_NoInputs);
+	ImGui::ColorEdit3("Comment color", settings.comment_temp, ImGuiColorEditFlags_NoInputs);
 	ImGui::Checkbox("Vsync", &settings.vsync);
 
 	settings.colors[COLOR_BG] = color_hex_from_rgb(settings.bg_temp);
 	settings.colors[COLOR_FG] = color_hex_from_rgb(settings.fg_temp);
+	settings.colors[COLOR_KEYWORD] = color_hex_from_rgb(settings.keyword_temp);
+	settings.colors[COLOR_DIRECTIVE] = color_hex_from_rgb(settings.directive_temp);
+	settings.colors[COLOR_NUMBER] = color_hex_from_rgb(settings.number_temp);
+	settings.colors[COLOR_STRING] = color_hex_from_rgb(settings.string_temp);
+	settings.colors[COLOR_TYPE] = color_hex_from_rgb(settings.type_temp);
+	settings.colors[COLOR_COMMENT] = color_hex_from_rgb(settings.comment_temp);
+
+	glUniform1ui(renderer->shader_background_color_slot, color_hex_from_rgb(settings.bg_temp));
 
 	glfwSwapInterval(settings.vsync ? 1 : 0);
 
 	ImGui::End();
 }
 
+void set_default_settings() {
+	settings.colors[COLOR_BG] = 0x2A282A;
+	settings.colors[COLOR_FG] = 0xd6b48b;
+	settings.colors[COLOR_KEYWORD] = 0xffffff;
+	settings.colors[COLOR_DIRECTIVE] = 0xffffff;
+	settings.colors[COLOR_NUMBER] = 0x3bc4b9;
+	settings.colors[COLOR_STRING] = 0xC0B8B7;
+	settings.colors[COLOR_TYPE] = 0x8AC887;
+	settings.colors[COLOR_COMMENT] = 0xE6E249;
+
+	settings.tab_width = 4;
+
+	color_set_rgb_from_hex(settings.bg_temp, settings.colors[COLOR_BG]);
+	color_set_rgb_from_hex(settings.fg_temp, settings.colors[COLOR_FG]);
+	color_set_rgb_from_hex(settings.keyword_temp, settings.colors[COLOR_KEYWORD]);
+	color_set_rgb_from_hex(settings.directive_temp, settings.colors[COLOR_DIRECTIVE]);
+	color_set_rgb_from_hex(settings.number_temp, settings.colors[COLOR_NUMBER]);
+	color_set_rgb_from_hex(settings.string_temp, settings.colors[COLOR_STRING]);
+	color_set_rgb_from_hex(settings.type_temp, settings.colors[COLOR_TYPE]);
+	color_set_rgb_from_hex(settings.comment_temp, settings.colors[COLOR_COMMENT]);
+}
+
 int main() {
 	create_default_keymaps();
-
-	settings.colors[COLOR_BG] = 0x000000;
-	settings.colors[COLOR_FG] = 0xFFFFFF;
-	settings.colors[COLOR_KEYWORD] = 0xFF0000;
-	settings.colors[COLOR_DIRECTIVE] = 0xFFFF00;
-	settings.colors[COLOR_NUMBER] = 0x0000FF;
-	settings.colors[COLOR_STRING] = 0x00FF00;
-
-	settings.fg_temp[0] = settings.fg_temp[1] = settings.fg_temp[2] = 1.0f;
-	settings.tab_width = 4;
+	set_default_settings();
 
 	Buffer *command_buffer = buffer_create(32);
 	command_buffer->mode = MODE_COMMAND;
@@ -742,7 +816,7 @@ int main() {
         	ImGui_ImplGlfw_NewFrame();
         	ImGui::NewFrame();
 
-			render_settings_window(window);
+			render_settings_window(&renderer, window);
 
 			ImGui::Render();
 			ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
