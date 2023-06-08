@@ -555,6 +555,12 @@ void renderer_render(Renderer *renderer, Pane *pane) {
 
 	u32 highlight_index = 0;
 	u32 highlight_cursor = 0;
+	Highlight highlight;
+	bool has_highlights = highlight_index < pane->highlights.length;
+	if (has_highlights) {
+		highlight = pane->highlights[highlight_index];
+		highlight_cursor = prev_pos;
+	}
 
 	for (pos = start; pos < buffer_length(buffer) && lines_drawn < bounds.height; pos = cursor_next(buffer, pos)) {
 		u32 prev_pos = pos;
@@ -571,13 +577,6 @@ void renderer_render(Renderer *renderer, Pane *pane) {
 
 		u32 render_x = bounds.left;
 		u32 render_y = bounds.top + lines_drawn;
-
-		bool has_highlights = highlight_index < pane->highlights.length;
-		Highlight highlight;
-		if (has_highlights) {
-			highlight = pane->highlights[highlight_index];
-			highlight_cursor = prev_pos;
-		}
 
 		for (u32 i = 0; i < draw_line_length; ++i) {
 			char ch = line[i];
@@ -633,7 +632,7 @@ void renderer_render(Renderer *renderer, Pane *pane) {
 		draw_buffer->cells[bounds.left + (bounds.top + lines_drawn) * draw_buffer->columns].glyph_mode = GLYPH_MODE_INVERT;
 	}
 
-	pane->end = cursor_get_end_of_line(buffer, pos);
+	pane->end = cursor_get_end_of_prev_line(buffer, pos);
 }
 
 void renderer_render_panes(Renderer *renderer) {
@@ -642,12 +641,12 @@ void renderer_render_panes(Renderer *renderer) {
 	memset(draw_buffer->cells, 0, draw_buffer->cells_size);
 
 	if (active_pane != command_pane) {
+		pane_update_scroll(active_pane);
 		highlighting_parse(active_pane);
 	}
 
 	for (u32 i = 0; i < pane_count; ++i) {
 		Pane *pane = &pane_pool[i];
-		pane_update_scroll(pane);
 		renderer_render(renderer, pane);
 	}
 }
