@@ -256,34 +256,65 @@ INLINE u32 cursor_get_column(Buffer *buffer, u32 cursor) {
 	return cursor - cursor_get_beginning_of_line(buffer, cursor);
 }
 
-u32 cursor_get_beginning_of_word(Buffer *buffer, u32 cursor) {
-	while (cursor > 0 && !isspace(buffer_get_char(buffer, cursor))) {
-		cursor--;
-	}
-
-	if (cursor == 0) {
+u32 char_get_type(char c) {
+	if (isspace(c)) {
 		return 0;
 	}
 
-	return cursor + 1;
+	if (('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z') || ('0' <= c && c <= '9')) {
+		return 1;
+	}
+
+	return 2;
+}
+
+u32 cursor_get_beginning_of_word(Buffer *buffer, u32 cursor) {
+	u32 start_type = char_get_type(buffer_get_char(buffer, cursor));
+	u32 current_type = start_type;
+
+	while (cursor > 0 && start_type == current_type) {
+		cursor--;
+		current_type = char_get_type(buffer_get_char(buffer, cursor));
+	}
+
+	if (current_type == 0) {
+		return cursor + 1;
+	}
+
+	return cursor;
 }
 
 u32 cursor_get_end_of_word(Buffer *buffer, u32 cursor) {
+	u32 start_type = char_get_type(buffer_get_char(buffer, cursor));
+	u32 current_type = start_type;
+
 	while (cursor < buffer_length(buffer) &&
-		   !isspace(buffer_get_char(buffer, cursor))) {
-			
+			start_type == current_type) {
 		cursor++;
+		current_type = char_get_type(buffer_get_char(buffer, cursor));
 	}
 
-	return cursor - 1;
+	if (current_type == 0) {
+		return cursor - 1;
+	}
+
+	return cursor;
 }
 
 u32 cursor_get_next_word(Buffer *buffer, u32 cursor) {
 	cursor = cursor_get_end_of_word(buffer, cursor);
 	cursor = cursor_next(buffer, cursor);
+	
+	u32 start_type = char_get_type(buffer_get_char(buffer, cursor));
+	u32 current_type = start_type;
 
-	while (cursor < buffer_length(buffer) && isspace(buffer_get_char(buffer, cursor))) {
+	while (cursor < buffer_length(buffer) && start_type == current_type) {
 		cursor++;
+		current_type = char_get_type(buffer_get_char(buffer, cursor));
+	}
+
+	if (current_type == 0) {
+		return cursor + 1;
 	}
 
 	return cursor;
@@ -293,8 +324,16 @@ u32 cursor_get_prev_word(Buffer *buffer, u32 cursor) {
 	cursor = cursor_get_beginning_of_word(buffer, cursor);
 	cursor = cursor_back(buffer, cursor);
 
-	while (cursor > 0 && isspace(buffer_get_char(buffer, cursor))) {
+	u32 start_type = char_get_type(buffer_get_char(buffer, cursor));
+	u32 current_type = start_type;
+
+	while (cursor > 0 && start_type == current_type) {
 		cursor--;
+		current_type = char_get_type(buffer_get_char(buffer, cursor));
+	}
+
+	if (current_type == 0) {
+		return cursor - 1;
 	}
 
 	return cursor;
@@ -344,7 +383,7 @@ void pane_update_scroll(Pane *pane) {
 		}
 
 		u32 line_diff = get_line_difference(buffer, start, end);
-		while (line_diff > pane->bounds.height) {
+		while (line_diff > pane->bounds.height - 1) {
 			end = cursor_get_end_of_prev_line(buffer, end);
 			line_diff--;
 		}
@@ -356,7 +395,7 @@ void pane_update_scroll(Pane *pane) {
 		}
 
 		u32 line_diff = get_line_difference(buffer, start, end);
-		while (line_diff > pane->bounds.height) {
+		while (line_diff > pane->bounds.height - 1) {
 			start = cursor_get_beginning_of_next_line(buffer, start);
 			line_diff--;
 		}

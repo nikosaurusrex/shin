@@ -173,28 +173,6 @@ SHORTCUT(show_settings) {
 	settings.show = !settings.show;
 }
 
-SHORTCUT(begin_command) {
-	command_pane->parent = active_pane;
-	active_pane = command_pane;
-	current_buffer = active_pane->buffer;
-	buffer_insert(current_buffer, 0, ':');
-}
-
-SHORTCUT(command_confirm) {
-	command_parse_and_run();
-    buffer_clear(current_buffer);
-
-	active_pane = command_pane->parent;
-	current_buffer = active_pane->buffer;
-}
-
-SHORTCUT(command_exit) {
-    buffer_clear(current_buffer);
-
-	active_pane = command_pane->parent;
-	current_buffer = active_pane->buffer;
-}
-
 SHORTCUT(quit) {
 	global_running = false;
 }

@@ -183,12 +183,14 @@ struct Highlight {
     u32 color_index;
 };
 
+#define MAX_STATUS_LENGTH 256
 
 struct Pane;
 struct Pane {
 	Array<Highlight> highlights;
 	Bounds bounds;
 	Buffer *buffer;
+    char status[MAX_STATUS_LENGTH];
 	u32 start;
 	u32 end;
 
@@ -238,7 +240,6 @@ static Pane pane_pool[MAX_PANES];
 static u32 pane_count = 0;
 static Pane *active_pane;
 static Pane *root_pane;
-static Pane *command_pane;
 
 static Keymap *keymaps[MODES_COUNT];
 

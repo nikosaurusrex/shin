@@ -26,9 +26,9 @@ void highlighting_parse(Pane *pane) {
 
 	Buffer *buffer = pane->buffer;
 
-	u32 pos = 0;
+	u32 pos = pane->start;
 	u32 len = buffer_length(buffer);
-	while (pos < len) {
+	while (pos < len && pos < pane->end) {
 		char c = buffer_get_char(buffer, pos);
 
 		if (isalpha(c)) {
