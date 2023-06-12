@@ -6,8 +6,10 @@ static char command_buffer[MAX_COMMAND_LENGTH];
 static u32 command_cursor = 0;
 
 void command_execute(char *command, char args[MAX_TOKENS][MAX_TOKEN_LENGTH], u32 args_count) {
-    /* TODO: rework with good system */
+    Pane *active_pane = &pane_pool[active_pane_index];
 
+    /* TODO: rework with good system */
+    
     if (strcmp(command, "w") == 0) {
         Buffer *target_buffer = active_pane->buffer;
 

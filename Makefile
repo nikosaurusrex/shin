@@ -22,7 +22,7 @@ else
 	endif
 endif
 
-CXXFLAGS += -O3 -std=c++20 
+CXXFLAGS += -g -std=c++20 
 
 BUILD_DIR = build
 IMGUI_DIR = extern/imgui
@@ -34,7 +34,7 @@ all: $(EXEC)
 
 .PHONY: clean
 clean:
-	rm -f $(EXEC) build/imgui.ini $(OBJ_FILES)
+	rm -f $(EXEC) imgui.ini $(OBJ_FILES) build/shin.o
 
 $(BUILD_DIR)/%.o: $(IMGUI_DIR)/%.cpp
 	$(CXX) $(CXXFLAGS) -c -o $@ $<

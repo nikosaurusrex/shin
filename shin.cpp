@@ -510,7 +510,7 @@ void draw_buffer_resize(Renderer *renderer) {
 	buffer->cells_size = sizeof(Cell) * buffer->columns * buffer->rows;
 	buffer->cells = (Cell *) realloc(buffer->cells, buffer->cells_size);
 
-	Bounds *bounds = &active_pane->bounds;
+	Bounds *bounds = &pane_pool[active_pane_index].bounds;
 	bounds->left = 0;
 	bounds->top = 0;
 	bounds->width = buffer->columns;
@@ -566,7 +566,7 @@ void renderer_init_glyph_map(FT_Library ft, Renderer *renderer) {
 	query_cell_data(renderer);
 }
 
-void renderer_render_pane(Renderer *renderer, Pane *pane) {
+void renderer_render_pane(Renderer *renderer, Pane *pane, bool is_active_pane) {
 	DrawBuffer *draw_buffer = &renderer->buffer;
 	Buffer *buffer = pane->buffer;
 	Bounds bounds = pane->bounds;
@@ -578,7 +578,6 @@ void renderer_render_pane(Renderer *renderer, Pane *pane) {
 	char line[MAX_LINE_LENGTH];
 	bool should_draw_cursor = false;
 	bool has_drawn_cursor = false;
-	bool is_active_pane = pane == active_pane;
 
 	u32 highlight_index = 0;
 	u32 highlight_cursor = 0;
@@ -648,7 +647,7 @@ void renderer_render_pane(Renderer *renderer, Pane *pane) {
 			}
 		}
 		
-		if (!has_drawn_cursor && pos == buffer->cursor) {
+		if (!has_drawn_cursor && pos == buffer->cursor && is_active_pane) {
 			draw_buffer->cells[render_x + render_y * draw_buffer->columns].glyph_flags = GLYPH_INVERT;
 			has_drawn_cursor = true;
 		}
@@ -672,7 +671,7 @@ void renderer_render_pane(Renderer *renderer, Pane *pane) {
 
 	u32 status_start = bounds.left + (bounds.top + bounds.height - 1) * draw_buffer->columns;
 	u32 status_length = strlen(pane->status);
-	for (u32 i = 0; i < draw_buffer->columns; ++i) {
+	for (u32 i = 0; i < MIN(draw_buffer->columns, bounds.width); ++i) {
 		Cell *cell = &draw_buffer->cells[status_start + i];
 
 		if (i < status_length) {
@@ -689,12 +688,13 @@ void renderer_render(Renderer *renderer) {
 
 	memset(draw_buffer->cells, 0, draw_buffer->cells_size);
 
+	Pane *active_pane = &pane_pool[active_pane_index];
 	pane_update_scroll(active_pane);
 	highlighting_parse(active_pane);
 
 	for (u32 i = 0; i < pane_count; ++i) {
 		Pane *pane = &pane_pool[i];
-		renderer_render_pane(renderer, pane);
+		renderer_render_pane(renderer, pane, i == active_pane_index);
 	}
 
 	// command textbox
@@ -775,9 +775,7 @@ int main() {
 	set_default_settings();
 
 	current_buffer = buffer_create(32);
-	current_buffer->file_path = 0;
-	pane_create(0, {0, 0, 30, 20}, current_buffer);
-	root_pane = active_pane;
+	pane_create({0, 0, 30, 20}, current_buffer);
 
 	FT_Library ft;
 	FT_Init_FreeType(&ft);

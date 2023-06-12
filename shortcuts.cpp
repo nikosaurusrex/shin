@@ -140,32 +140,32 @@ SHORTCUT(window_operation) {
 }
 
 SHORTCUT(next_pane) {
-	if (active_pane->child) {
-		active_pane = active_pane->child;
+	active_pane_index++;
+	if (active_pane_index >= pane_count) {
+		active_pane_index = 0;
 	}
 
-	current_buffer = active_pane->buffer;
+	current_buffer = pane_pool[active_pane_index].buffer;
 	current_buffer->mode = MODE_NORMAL;
 }
 
 SHORTCUT(prev_pane) {
-	if (active_pane->parent) {
-		active_pane = active_pane->parent;
+	active_pane_index++;
+	if (active_pane_index >= pane_count) {
+		active_pane_index = 0;
 	}
 
-	current_buffer = active_pane->buffer;
+	current_buffer = pane_pool[active_pane_index].buffer;
 	current_buffer->mode = MODE_NORMAL;
 }
 
 SHORTCUT(split_vertically) {
 	pane_split_vertically();
-	active_pane = active_pane->child;
 	current_buffer->mode = MODE_NORMAL;
 }
 
 SHORTCUT(split_horizontally) {
 	pane_split_horizontally();
-	active_pane = active_pane->child;
 	current_buffer->mode = MODE_NORMAL;
 }
 

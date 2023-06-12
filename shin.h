@@ -193,9 +193,6 @@ struct Pane {
     char status[MAX_STATUS_LENGTH];
 	u32 start;
 	u32 end;
-
-	Pane *parent;
-	Pane *child;
 };
 
 enum ColorPalette : u32 {
@@ -238,8 +235,7 @@ static InputEvent last_input_event;
 #define MAX_PANES 12
 static Pane pane_pool[MAX_PANES];
 static u32 pane_count = 0;
-static Pane *active_pane;
-static Pane *root_pane;
+static u32 active_pane_index = 0;
 
 static Keymap *keymaps[MODES_COUNT];
 
