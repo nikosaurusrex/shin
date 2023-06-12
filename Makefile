@@ -22,7 +22,7 @@ else
 	endif
 endif
 
-CXXFLAGS += -g -std=c++20 
+CXXFLAGS += -O3 -std=c++20 
 
 BUILD_DIR = build
 IMGUI_DIR = extern/imgui

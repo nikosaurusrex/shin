@@ -4,10 +4,12 @@ Buffer *buffer_create(u32 size) {
 	buffer->data = (char *) malloc(size);
 	buffer->file_path = 0;
 	buffer->mode = MODE_NORMAL;
-	buffer->cursor = 0;
 	buffer->size = size;
 	buffer->gap_start = 0;
 	buffer->gap_end = size;
+	
+	buffer->cursor = 0;
+	buffer->cursor_width = 0;
 
 	return buffer;
 }

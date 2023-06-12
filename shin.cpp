@@ -252,6 +252,7 @@ void create_default_keymaps() {
 	keymap->shortcuts['G'] = shortcut_start_multi_key_shortcut;
 	keymap->shortcuts['C'] = shortcut_start_multi_key_shortcut;
 	keymap->shortcuts['D'] = shortcut_start_multi_key_shortcut;
+	keymap->shortcuts['V' | SHIFT] = shortcut_visual_mode;
 
 	keymaps[MODE_NORMAL] = keymap;
 	
@@ -279,6 +280,15 @@ void create_default_keymaps() {
 	keymap->shortcuts[GLFW_KEY_ESCAPE] = shortcut_command_exit;
 
 	keymaps[MODE_COMMAND] = keymap;
+
+	// visual keymap
+	keymap = keymap_create_empty();
+
+	keymap->shortcuts['L'] = shortcut_cursor_width_increase;
+	keymap->shortcuts['H'] = shortcut_cursor_width_decrease;
+	keymap->shortcuts[GLFW_KEY_ESCAPE] = shortcut_normal_mode;
+
+	keymaps[MODE_VISUAL] = keymap;
 
 	// multikey shortcut keymap
 	keymap = keymap_create_empty();
@@ -579,13 +589,13 @@ void renderer_render_pane(Renderer *renderer, Pane *pane, bool is_active_pane) {
 	u32 pos;
 
 	char line[MAX_LINE_LENGTH];
-	bool should_draw_cursor = false;
 	bool has_drawn_cursor = false;
 
 	u32 highlight_index = 0;
-	u32 highlight_cursor = 0;
 	Highlight highlight;
 	bool has_highlights = highlight_index < pane->highlights.length;
+
+	u32 render_cursor = 0;
 
 	for (pos = start; pos < buffer_length(buffer) && lines_drawn < bounds.height - 1; pos = cursor_next(buffer, pos)) {
 		u32 prev_pos = pos;
@@ -595,12 +605,6 @@ void renderer_render_pane(Renderer *renderer, Pane *pane, bool is_active_pane) {
 
 		if (has_highlights) {
 			highlight = pane->highlights[highlight_index];
-			highlight_cursor = prev_pos;
-		}
-
-		if (is_active_pane && (prev_pos <= buffer->cursor && buffer->cursor <= pos)
-		) {
-			should_draw_cursor = true;
 		}
 
 		u32 draw_line_length = MIN(line_length, MIN(MAX_LINE_LENGTH, MIN(bounds.width, draw_buffer->columns)));
@@ -618,12 +622,12 @@ void renderer_render_pane(Renderer *renderer, Pane *pane, bool is_active_pane) {
 			cell->glyph_flags = 0;
 
 			if (has_highlights) {
-				bool in_highlight = highlight.start <= highlight_cursor && highlight_cursor <= highlight.end;
+				bool in_highlight = highlight.start <= render_cursor && render_cursor <= highlight.end;
 				if (in_highlight) {
 					cell->foreground = settings.colors[highlight.color_index];
 				}
 				
-				if (highlight_cursor == highlight.end) {
+				if (render_cursor == highlight.end) {
 					highlight_index++;
 					if (highlight_index < pane->highlights.length) {
 						highlight = pane->highlights[highlight_index];
@@ -631,8 +635,6 @@ void renderer_render_pane(Renderer *renderer, Pane *pane, bool is_active_pane) {
 						has_highlights = false;
 					}
 				}
-				
-				highlight_cursor++;
 			}
 
 			if (ch == '\t') {
@@ -641,13 +643,23 @@ void renderer_render_pane(Renderer *renderer, Pane *pane, bool is_active_pane) {
 				render_x++;
 			}
 
-			if (should_draw_cursor) {
-				u32 cursor_buffer_rel_line_pos = buffer->cursor - prev_pos;
-				if (cursor_buffer_rel_line_pos == i) {
-					cell->glyph_flags = GLYPH_INVERT;
-					has_drawn_cursor = true;
+			u32 absolute_render_cursor = pane->start + render_cursor;
+			u32 render_cursor_start = MIN(buffer->cursor, buffer->cursor + buffer->cursor_width);
+			u32 render_cursor_end = MAX(buffer->cursor, buffer->cursor + buffer->cursor_width);
+
+			if (absolute_render_cursor >= render_cursor_start &&
+				absolute_render_cursor <= render_cursor_end &&
+				is_active_pane) {
+
+				if (current_buffer->mode == MODE_VISUAL) {
+					cell->background = settings.colors[COLOR_SELECTION];
+				} else {
+					cell->glyph_flags |= GLYPH_INVERT;
 				}
+ 				has_drawn_cursor = true;
 			}
+
+			render_cursor++;
 		}
 		
 		if (!has_drawn_cursor && pos == buffer->cursor && is_active_pane) {
@@ -656,6 +668,7 @@ void renderer_render_pane(Renderer *renderer, Pane *pane, bool is_active_pane) {
 		}
 
 		lines_drawn++;
+		render_cursor++;
 	}
 
 	if (is_active_pane && !has_drawn_cursor) {
@@ -669,6 +682,8 @@ void renderer_render_pane(Renderer *renderer, Pane *pane, bool is_active_pane) {
 	const char *mode_string = "NORMAL";
 	if (buffer->mode == MODE_INSERT) {
 		mode_string = "INSERT";
+	} else if (buffer->mode == MODE_VISUAL) {
+		mode_string = "VISUAL";
 	}
 	snprintf(pane->status, MAX_STATUS_LENGTH, "%s %s", mode_string, buffer->file_path);
 

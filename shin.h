@@ -127,18 +127,12 @@ struct Array {
 
 enum Mode {
 	MODE_INSERT = 0,
-	MODE_NORMAL = 1,
-	MODE_WINDOW_OPERATION = 2,
-	MODE_COMMAND = 3,
+	MODE_NORMAL,
+	MODE_WINDOW_OPERATION,
+	MODE_COMMAND,
+    MODE_VISUAL,
     MODE_MULTIKEY_SHORTCUT,
 	MODES_COUNT
-};
-
-struct Cursor {
-    u32 start;
-    u32 width;
-    u32 x;
-    u32 y;  
 };
 
 struct Buffer {
@@ -151,6 +145,7 @@ struct Buffer {
 	u32 gap_end;
     
 	u32 cursor;
+    s32 cursor_width;
 };
 
 enum {

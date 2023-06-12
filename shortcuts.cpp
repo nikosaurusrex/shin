@@ -112,6 +112,7 @@ SHORTCUT(insert_mode_next) {
 }
 
 SHORTCUT(normal_mode) {
+	current_buffer->cursor_width = 0;
 	current_buffer->mode = MODE_NORMAL;
 }
 
@@ -222,6 +223,23 @@ SHORTCUT(multi_key_insert) {
 
 			shortcut_fn_insert_mode(); 
 		}
+	}
+}
+
+SHORTCUT(visual_mode) {
+	current_buffer->mode = MODE_VISUAL;
+	current_buffer->cursor_width = 0;
+}
+
+SHORTCUT(cursor_width_increase) {
+	if (current_buffer->cursor + current_buffer->cursor_width < buffer_length(current_buffer)) {
+		current_buffer->cursor_width++;
+	}
+}
+
+SHORTCUT(cursor_width_decrease) {
+	if (current_buffer->cursor + current_buffer->cursor_width > 0) {
+		current_buffer->cursor_width--;
 	}
 }
 
