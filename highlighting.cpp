@@ -88,19 +88,7 @@ void highlighting_parse(Pane *pane) {
 			}
 
 			pane->highlights.add({start, pos, COLOR_STRING});
-			pos++;
-		} else if (c == '<') {
-			u32 start = pos;
-
 			pos = cursor_next(buffer, pos);
-			c = buffer_get_char(buffer, pos);
-			while (c != '>' && pos < len) {
-				pos = cursor_next(buffer, pos);
-				c = buffer_get_char(buffer, pos);
-			}
-
-			pane->highlights.add({start, pos, COLOR_DIRECTIVE});
-			pos++;
 		} else if (c == '#') {
 			u32 start = pos;
 
@@ -112,11 +100,27 @@ void highlighting_parse(Pane *pane) {
 			}
 
 			pane->highlights.add({start, pos, COLOR_DIRECTIVE});
-			pos++;
+			pos = cursor_next(buffer, pos);
+		} else if (c == '/') {
+			u32 start = pos;
+
+			pos = cursor_next(buffer, pos);
+
+			if (pos < len) {
+				c = buffer_get_char(buffer, pos);
+				if (c == '/') {
+					while (c != '\n' && pos < len) {
+						pos = cursor_next(buffer, pos);
+						c = buffer_get_char(buffer, pos);
+					}
+				}
+			}
+
+			pane->highlights.add({start, pos - 1, COLOR_COMMENT});
 		} else if (isspace(c)) {
-			pos++;
+			pos = cursor_next(buffer, pos);
 		} else {
-			pos++;
+			pos = cursor_next(buffer, pos);
 		}
 	}
 }

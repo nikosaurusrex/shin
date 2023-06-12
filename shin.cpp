@@ -166,7 +166,7 @@ GlyphMap *glyph_map_create(FT_Library ft, const char *font, u32 pixel_size) {
 	map->data = (u8 *) malloc(map->width * map->height);
 	memset(map->data, 0, map->width * map->height);
 
-	u32 chars_count = '~' - ' ';
+	u32 chars_count = ('~' - ' ') + 1;
 
 	for (u32 i = 0; i < chars_count; ++i) {
 		u32 code = ' ' + i;
@@ -291,11 +291,11 @@ void create_default_keymaps() {
 
 
 void key_callback(GLFWwindow* window, s32 key, s32 scancode, s32 action, s32 mods) {
-	if (action != GLFW_PRESS) {
+	if (action != GLFW_PRESS && action != GLFW_REPEAT) {
 		return;
 	}
 
-	if (!(mods & GLFW_MOD_CONTROL) && !(mods & GLFW_MOD_ALT)) {
+	if (!(mods & GLFW_MOD_CONTROL) || key >= GLFW_KEY_LEFT_BRACKET) {
 		if (GLFW_KEY_SPACE <= key && key <= GLFW_KEY_GRAVE_ACCENT) {
 			return;
 		}

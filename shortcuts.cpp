@@ -203,7 +203,7 @@ SHORTCUT(multi_key_insert) {
 			u32 to = cursor_get_beginning_of_next_line(current_buffer, current_buffer->cursor);
 			
 			buffer_delete_multiple(current_buffer, from, (to - from));
-			
+
 			shortcut_fn_normal_mode(); 
 		} else if (multi_shortcut_buffer[1] == 'w') {
 			u32 from = current_buffer->cursor;
