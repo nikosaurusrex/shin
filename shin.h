@@ -134,14 +134,23 @@ enum Mode {
 	MODES_COUNT
 };
 
+struct Cursor {
+    u32 start;
+    u32 width;
+    u32 x;
+    u32 y;  
+};
+
 struct Buffer {
 	Mode mode;
 	char *data;
 	char *file_path;
-	u32 cursor;
+
 	u32 size;
 	u32 gap_start;
 	u32 gap_end;
+    
+	u32 cursor;
 };
 
 enum {
@@ -187,12 +196,15 @@ struct Highlight {
 
 struct Pane;
 struct Pane {
+    char status[MAX_STATUS_LENGTH];
 	Array<Highlight> highlights;
+
 	Bounds bounds;
 	Buffer *buffer;
-    char status[MAX_STATUS_LENGTH];
+
 	u32 start;
 	u32 end;
+    u32 line_start;
 };
 
 enum ColorPalette : u32 {
@@ -204,6 +216,7 @@ enum ColorPalette : u32 {
 	COLOR_STRING,
 	COLOR_TYPE,
 	COLOR_COMMENT,
+    COLOR_SELECTION,
 	COLOR_COUNT
 };
 
@@ -223,6 +236,7 @@ struct Settings {
 	f32 string_temp[3];
 	f32 type_temp[3];
 	f32 comment_temp[3];
+	f32 selection_temp[3];
 };
 
 void read_file_to_buffer(Buffer *buffer);

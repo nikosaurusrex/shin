@@ -138,6 +138,9 @@ void color_set_rgb_from_hex(f32 rgb[3], u32 hex) {
 	rgb[2] = b / 255.0f;
 }
 
+u32 color_invert(u32 c) {
+	return 0xFFFFFFFF - c;
+}
 
 FontMetrics font_metrics_get(FT_Face face) {
 	FontMetrics metrics = {0};
@@ -729,6 +732,7 @@ void render_settings_window(Renderer *renderer, GLFWwindow *window) {
 	ImGui::ColorEdit3("String color", settings.string_temp, ImGuiColorEditFlags_NoInputs);
 	ImGui::ColorEdit3("Type color", settings.type_temp, ImGuiColorEditFlags_NoInputs);
 	ImGui::ColorEdit3("Comment color", settings.comment_temp, ImGuiColorEditFlags_NoInputs);
+	ImGui::ColorEdit3("Selection color", settings.selection_temp, ImGuiColorEditFlags_NoInputs);
 	ImGui::Checkbox("Vsync", &settings.vsync);
 
 	settings.colors[COLOR_BG] = color_hex_from_rgb(settings.bg_temp);
@@ -739,6 +743,7 @@ void render_settings_window(Renderer *renderer, GLFWwindow *window) {
 	settings.colors[COLOR_STRING] = color_hex_from_rgb(settings.string_temp);
 	settings.colors[COLOR_TYPE] = color_hex_from_rgb(settings.type_temp);
 	settings.colors[COLOR_COMMENT] = color_hex_from_rgb(settings.comment_temp);
+	settings.colors[COLOR_SELECTION] = color_hex_from_rgb(settings.selection_temp);
 
 	glUniform1ui(renderer->shader_background_color_slot, color_hex_from_rgb(settings.bg_temp));
 
@@ -756,6 +761,7 @@ void set_default_settings() {
 	settings.colors[COLOR_STRING] = 0xC0B8B7;
 	settings.colors[COLOR_TYPE] = 0x8AC887;
 	settings.colors[COLOR_COMMENT] = 0xE6E249;
+	settings.colors[COLOR_SELECTION] = 0xf07a8e;
 
 	settings.vsync = true;
 	settings.tab_width = 4;
@@ -768,6 +774,7 @@ void set_default_settings() {
 	color_set_rgb_from_hex(settings.string_temp, settings.colors[COLOR_STRING]);
 	color_set_rgb_from_hex(settings.type_temp, settings.colors[COLOR_TYPE]);
 	color_set_rgb_from_hex(settings.comment_temp, settings.colors[COLOR_COMMENT]);
+	color_set_rgb_from_hex(settings.selection_temp, settings.colors[COLOR_SELECTION]);
 }
 
 int main() {

@@ -5,5 +5,5 @@ implement more commands like goto-line, search, { }
 layout management
 changing font/colors
 
-fix pane split
 line numbers
+selection
