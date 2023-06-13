@@ -212,6 +212,7 @@ void create_default_keymaps() {
 	Keymap *keymap = keymap_create_empty();
 
 	for (char ch = ' '; ch <= '~'; ++ch) {
+		if (ch == ':') continue;
 		keymap->shortcuts[ch] = shortcut_insert_char;
 		keymap->shortcuts[ch | SHIFT] = shortcut_insert_char;
 	}
@@ -229,44 +230,18 @@ void create_default_keymaps() {
 	
 	// normal keymap
 	keymap = keymap_create_empty();
-	keymap->shortcuts['X'] = shortcut_delete_forwards;
-	keymap->shortcuts['H'] = shortcut_cursor_back;
-	keymap->shortcuts['L'] = shortcut_cursor_next;
-	keymap->shortcuts['J'] = shortcut_next_line;
-	keymap->shortcuts['K'] = shortcut_prev_line;
-	keymap->shortcuts['W'] = shortcut_go_word_next;
-	keymap->shortcuts['E'] = shortcut_go_word_end;
-	keymap->shortcuts['B'] = shortcut_go_word_prev;
-	keymap->shortcuts['I' | SHIFT] = shortcut_goto_beginning_of_line;
-	keymap->shortcuts['A' | SHIFT] = shortcut_goto_end_of_line;
+
+	for (char ch = ' '; ch <= '~'; ++ch) {
+		keymap->shortcuts[ch] = shortcut_normal_insert;
+		keymap->shortcuts[ch | SHIFT] = shortcut_normal_insert;
+		keymap->shortcuts[ch | CTRL] = shortcut_normal_insert;
+	}
 	keymap->shortcuts[GLFW_KEY_F4 | ALT] = shortcut_quit;
-	keymap->shortcuts['I'] = shortcut_insert_mode;
-	keymap->shortcuts['A'] = shortcut_insert_mode_next;
-	keymap->shortcuts['O'] = shortcut_new_line_after;
-	keymap->shortcuts['O' | SHIFT] = shortcut_new_line_before;
-	keymap->shortcuts['G' | SHIFT] = shortcut_goto_buffer_end;
-	keymap->shortcuts['W' | CTRL] = shortcut_window_operation;
 	keymap->shortcuts[GLFW_KEY_F3] = shortcut_show_settings;
 	keymap->shortcuts[':' | SHIFT] = shortcut_begin_command;
-	keymap->shortcuts['G'] = shortcut_start_multi_key_shortcut;
-	keymap->shortcuts['C'] = shortcut_start_multi_key_shortcut;
-	keymap->shortcuts['D'] = shortcut_start_multi_key_shortcut;
-	keymap->shortcuts['V'] = shortcut_visual_mode;
-	keymap->shortcuts['V' | SHIFT] = shortcut_visual_mode_line;
+	keymap->shortcuts[GLFW_KEY_ESCAPE] = shortcut_normal_mode_clear;
 
 	keymaps[MODE_NORMAL] = keymap;
-	
-	// window operation
-	keymap = keymap_create_empty();
-	keymap->shortcuts['H' | CTRL] = shortcut_prev_pane;
-	keymap->shortcuts['H'] = shortcut_prev_pane;
-	keymap->shortcuts['L' | CTRL] = shortcut_next_pane;
-	keymap->shortcuts['L'] = shortcut_next_pane;
-	keymap->shortcuts['V' | CTRL] = shortcut_split_vertically;
-	keymap->shortcuts['V'] = shortcut_split_vertically;
-	keymap->shortcuts['S' | CTRL] = shortcut_split_horizontally;
-	keymap->shortcuts['S'] = shortcut_split_horizontally;
-	keymaps[MODE_WINDOW_OPERATION] = keymap;
 	
 	// command keymap
 	keymap = keymap_create_empty();
@@ -295,17 +270,6 @@ void create_default_keymaps() {
 	keymap->shortcuts[GLFW_KEY_ESCAPE] = shortcut_normal_mode;
 
 	keymaps[MODE_VISUAL] = keymap;
-
-	// multikey shortcut keymap
-	keymap = keymap_create_empty();
-
-	for (char ch = ' '; ch <= '~'; ++ch) {
-		keymap->shortcuts[ch] = shortcut_multi_key_insert;
-		keymap->shortcuts[ch | SHIFT] = shortcut_multi_key_insert;
-	}
-	keymap->shortcuts[GLFW_KEY_ESCAPE] = shortcut_normal_mode;
-
-	keymaps[MODE_MULTIKEY_SHORTCUT] = keymap;
 }
 
 
@@ -319,16 +283,26 @@ void key_callback(GLFWwindow* window, s32 key, s32 scancode, s32 action, s32 mod
 			return;
 		}
 	}
+	
+	switch (key) {
+		case GLFW_KEY_LEFT_CONTROL:
+		case GLFW_KEY_RIGHT_CONTROL:
+		case GLFW_KEY_LEFT_ALT:
+		case GLFW_KEY_RIGHT_ALT:
+		case GLFW_KEY_LEFT_SHIFT:
+		case GLFW_KEY_RIGHT_SHIFT:
+			return;
+		default:
+			break;
+	}
 
 	u16 kcomb = key;
 	if (mods & GLFW_MOD_CONTROL) {
 		kcomb |= CTRL;
 	}
-
 	if (mods & GLFW_MOD_SHIFT) {
 		kcomb |= SHIFT;
 	}
-
 	if (mods & GLFW_MOD_ALT) {
 		kcomb |= ALT;
 	}
@@ -620,20 +594,35 @@ void renderer_render_pane(Renderer *renderer, Pane *pane, bool is_active_pane) {
 
 	u32 render_cursor = pane->start;
 
+	char line_number_buffer[MAX_NUMBER_LENGTH];
+	itoa(pane->line_start + bounds.height - 1, line_number_buffer, 10);
+	u32 max_line_number_length = strlen(line_number_buffer);
+
 	for (pos = start; pos < buffer_length(buffer) && lines_drawn < bounds.height - 1; pos = cursor_next(buffer, pos)) {
 		u32 prev_pos = pos;
 
 		u32 line_length = buffer_get_line(buffer, line, sizeof(line) - 1, &pos);
 		line[line_length] = 0;
 
-		if (has_highlights) {
-			highlight = pane->highlights[highlight_index];
-		}
-
 		u32 draw_line_length = MIN(line_length, MIN(MAX_LINE_LENGTH, MIN(bounds.width, draw_buffer->columns)));
 
-		u32 render_x = bounds.left;
+		u32 render_x = bounds.left + max_line_number_length + 1;
 		u32 render_y = bounds.top + lines_drawn;
+
+		// display line number 
+		itoa(pane->line_start + lines_drawn + 1, line_number_buffer, 10);
+		u32 line_number_length = strlen(line_number_buffer);
+
+		u32 line_number_offset = max_line_number_length - line_number_length;
+		for (u32 j = 0; j < line_number_length; ++j) {
+			Cell *cell = &draw_buffer->cells[line_number_offset + j + render_y * draw_buffer->columns];
+			cell->glyph_index = line_number_buffer[j] - 32;
+			cell->background = settings.colors[COLOR_BG];
+			cell->foreground = settings.colors[COLOR_FG];
+			cell->glyph_flags = 0;
+		}
+
+		// buffer rendering
 
 		for (u32 i = 0; i < draw_line_length; ++i) {
 			char ch = line[i];
@@ -644,7 +633,9 @@ void renderer_render_pane(Renderer *renderer, Pane *pane, bool is_active_pane) {
 			cell->foreground = settings.colors[COLOR_FG];
 			cell->glyph_flags = 0;
 			
+			// highlights
 			if (has_highlights) {
+				highlight = pane->highlights[highlight_index];
 				bool in_highlight = highlight.start <= render_cursor && render_cursor <= highlight.end;
 				if (in_highlight) {
 					cell->foreground = settings.colors[highlight.color_index];
@@ -660,6 +651,7 @@ void renderer_render_pane(Renderer *renderer, Pane *pane, bool is_active_pane) {
 				}
 			}
 
+			// cursor / visual mode selection
 			u32 render_cursor_start = MIN(buffer->cursor, buffer->cursor + buffer->cursor_width);
 			u32 render_cursor_end = MAX(buffer->cursor, buffer->cursor + buffer->cursor_width);
 
@@ -675,6 +667,7 @@ void renderer_render_pane(Renderer *renderer, Pane *pane, bool is_active_pane) {
  				has_drawn_cursor = true;
 			}
 
+			// render tab character as tab_width wide
 			if (ch == '\t') {
 				for (u32 k = 1; k < settings.tab_width; ++k) {
 					draw_buffer->cells[render_x + k + render_y * draw_buffer->columns].background = cell->background;
@@ -697,7 +690,8 @@ void renderer_render_pane(Renderer *renderer, Pane *pane, bool is_active_pane) {
 	}
 
 	if (is_active_pane && !has_drawn_cursor) {
-		draw_buffer->cells[bounds.left + (bounds.top + lines_drawn) * draw_buffer->columns].glyph_flags = GLYPH_INVERT;
+		draw_buffer->cells[bounds.left + max_line_number_length + 1 +
+						   (bounds.top + lines_drawn) * draw_buffer->columns].glyph_flags = GLYPH_INVERT;
 	}
 
 	pane->end = cursor_get_end_of_prev_line(buffer, pos);

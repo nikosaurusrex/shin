@@ -7,9 +7,11 @@
 #define ALT   (1 << 9)
 #define SHIFT (1 << 10)
 
-#define MAX_MULTI_SHORTCUT_LENGTH 12
-static char multi_shortcut_buffer[MAX_MULTI_SHORTCUT_LENGTH];
-static u32 multi_shortcut_index = 0;
+#define MAX_NORMAL_LENGTH 16
+static char normal_buffer[MAX_NORMAL_LENGTH];
+static u32 normal_index = 0;
+
+bool normal_mode_get_shortcut(Shortcut *shortcut);
 
 SHORTCUT(null) {
 	
@@ -26,7 +28,7 @@ SHORTCUT(delete_forwards) {
 SHORTCUT(delete_backwards) {
 	buffer_delete_backwards(current_buffer, current_buffer->cursor);
 }
-
+	
 SHORTCUT(cursor_back) {
 	current_buffer->cursor = cursor_back(current_buffer, current_buffer->cursor);
 }
@@ -34,6 +36,34 @@ SHORTCUT(cursor_back) {
 SHORTCUT(cursor_next) {
 	current_buffer->cursor = cursor_next(current_buffer, current_buffer->cursor);
 }
+
+SHORTCUT(insert_new_line) {
+	buffer_insert(current_buffer, current_buffer->cursor, '\n');
+}
+
+SHORTCUT(insert_tab) {
+	buffer_insert(current_buffer, current_buffer->cursor, '\t');
+}
+
+SHORTCUT(goto_beginning_of_line) {
+	current_buffer->cursor = cursor_get_beginning_of_line(current_buffer, current_buffer->cursor);
+	current_buffer->mode = MODE_INSERT;
+}
+
+SHORTCUT(goto_end_of_line) {
+	current_buffer->cursor = cursor_get_end_of_line(current_buffer, current_buffer->cursor);
+	current_buffer->mode = MODE_INSERT;
+}
+
+SHORTCUT(insert_mode) {
+	current_buffer->mode = MODE_INSERT;
+}
+
+SHORTCUT(insert_mode_next) {
+	current_buffer->mode = MODE_INSERT;
+	current_buffer->cursor = cursor_next(current_buffer, current_buffer->cursor);
+}
+
 
 SHORTCUT(next_line) {
 	Buffer *buffer = current_buffer;
@@ -83,38 +113,7 @@ SHORTCUT(go_word_prev) {
 		buffer->cursor = cursor_get_beginning_of_word(buffer, buffer->cursor);
 	}
 }
-
-SHORTCUT(insert_new_line) {
-	buffer_insert(current_buffer, current_buffer->cursor, '\n');
-}
-
-SHORTCUT(insert_tab) {
-	buffer_insert(current_buffer, current_buffer->cursor, '\t');
-}
-
-SHORTCUT(goto_beginning_of_line) {
-	current_buffer->cursor = cursor_get_beginning_of_line(current_buffer, current_buffer->cursor);
-	current_buffer->mode = MODE_INSERT;
-}
-
-SHORTCUT(goto_end_of_line) {
-	current_buffer->cursor = cursor_get_end_of_line(current_buffer, current_buffer->cursor);
-	current_buffer->mode = MODE_INSERT;
-}
-
-SHORTCUT(insert_mode) {
-	current_buffer->mode = MODE_INSERT;
-}
-
-SHORTCUT(insert_mode_next) {
-	current_buffer->mode = MODE_INSERT;
-	current_buffer->cursor = cursor_next(current_buffer, current_buffer->cursor);
-}
-
-SHORTCUT(normal_mode) {
-	current_buffer->cursor_width = 0;
-	current_buffer->mode = MODE_NORMAL;
-}
+	
 
 SHORTCUT(goto_buffer_begin) {
 	current_buffer->cursor = 0;
@@ -134,10 +133,6 @@ SHORTCUT(new_line_before) {
 SHORTCUT(new_line_after) {
 	shortcut_fn_goto_end_of_line();
 	shortcut_fn_insert_new_line();
-}
-
-SHORTCUT(window_operation) {
-	current_buffer->mode = MODE_WINDOW_OPERATION;
 }
 
 SHORTCUT(next_pane) {
@@ -170,60 +165,50 @@ SHORTCUT(split_horizontally) {
 	current_buffer->mode = MODE_NORMAL;
 }
 
+SHORTCUT(normal_mode) {
+	current_buffer->cursor_width = 0;
+	current_buffer->mode = MODE_NORMAL;
+	normal_index = 0;
+	normal_buffer[normal_index] = 0;
+}
+
+SHORTCUT(normal_mode_clear) {
+	normal_index = 0;
+	normal_buffer[normal_index] = 0;
+}
+
+SHORTCUT(normal_insert) {
+	if (normal_index + 2 >= MAX_NORMAL_LENGTH) {
+		return;
+	}
+
+	char ch = last_input_event.ch;
+	u16 key_comb = last_input_event.key_comb;
+
+	if (key_comb & CTRL) {
+		normal_buffer[normal_index++] = '^';
+		normal_buffer[normal_index++] = ch;
+
+	} else {
+		normal_buffer[normal_index++] = ch;
+	}
+
+	normal_buffer[normal_index] = 0;
+
+	Shortcut shortcut;
+	bool exists = normal_mode_get_shortcut(&shortcut);
+	if (exists) {
+		shortcut.function();
+		shortcut_fn_normal_mode_clear();
+	}
+}
+
 SHORTCUT(show_settings) {
 	settings.show = !settings.show;
 }
 
 SHORTCUT(quit) {
 	global_running = false;
-}
-
-SHORTCUT(start_multi_key_shortcut) {
-	multi_shortcut_index = 0;
-	multi_shortcut_buffer[multi_shortcut_index++] = last_input_event.ch;
-	multi_shortcut_buffer[multi_shortcut_index] = 0;
-	current_buffer->mode = MODE_MULTIKEY_SHORTCUT;
-}
-
-SHORTCUT(multi_key_insert) {
-	if (multi_shortcut_index + 1 >= MAX_MULTI_SHORTCUT_LENGTH) {
-		return;
-	}
-
-	multi_shortcut_buffer[multi_shortcut_index++] = last_input_event.ch;
-	multi_shortcut_buffer[multi_shortcut_index] = 0;
-
-	if (multi_shortcut_buffer[0] == 'g') {
-		if (multi_shortcut_buffer[1] == 'g') {
-			shortcut_fn_goto_buffer_begin();
-			shortcut_fn_normal_mode(); 
-		}
-	} else if (multi_shortcut_buffer[0] == 'd') {
-		if (multi_shortcut_buffer[1] == 'd') {
-			u32 from = cursor_get_beginning_of_line(current_buffer, current_buffer->cursor);
-			u32 to = cursor_get_beginning_of_next_line(current_buffer, current_buffer->cursor);
-			
-			buffer_delete_multiple(current_buffer, from, (to - from));
-
-			shortcut_fn_normal_mode(); 
-		} else if (multi_shortcut_buffer[1] == 'w') {
-			u32 from = current_buffer->cursor;
-			u32 to = cursor_get_next_word(current_buffer, current_buffer->cursor);
-
-			buffer_delete_multiple(current_buffer, from, (to - from));
-
-			shortcut_fn_normal_mode(); 
-		}
-	} else if (multi_shortcut_buffer[0] == 'c') {
-		if (multi_shortcut_buffer[1] == 'w') {
-			u32 from = current_buffer->cursor;
-			u32 to = cursor_get_end_of_word(current_buffer, current_buffer->cursor);
-
-			buffer_delete_multiple(current_buffer, from, (to - from) + 1);
-
-			shortcut_fn_insert_mode(); 
-		}
-	}
 }
 
 SHORTCUT(visual_mode) {
@@ -265,7 +250,6 @@ SHORTCUT(visual_next_line) {
 
 	buffer->cursor_width += end - cursor;
 }
-
 
 SHORTCUT(visual_prev_line) {
 	Buffer *buffer = current_buffer;
@@ -351,4 +335,120 @@ void keymap_dispatch_event(Keymap *keymap, InputEvent event) {
 		Shortcut *shortcut = keymap_get_shortcut(keymap, event.key_comb);
 		shortcut->function();
 	}
+}
+
+/* TODO: definetly rework this! */
+bool normal_mode_get_shortcut(Shortcut *shortcut) {
+	switch (normal_buffer[0]) {
+		// one letter shortcuts
+		case 'x': *shortcut = shortcut_delete_forwards; break;
+		case 'h': *shortcut = shortcut_cursor_back; break;
+		case 'l': *shortcut = shortcut_cursor_next; break;
+		case 'j': *shortcut = shortcut_next_line; break;
+		case 'k': *shortcut = shortcut_prev_line; break;
+		case 'w': *shortcut = shortcut_go_word_next; break;
+		case 'e': *shortcut = shortcut_go_word_end; break;
+		case 'b': *shortcut = shortcut_go_word_prev; break;
+		case 'I': *shortcut = shortcut_goto_beginning_of_line; break;
+		case 'A': *shortcut = shortcut_goto_end_of_line; break;
+		case 'i': *shortcut = shortcut_insert_mode; break;
+		case 'a': *shortcut = shortcut_insert_mode_next; break;
+		case 'o': *shortcut = shortcut_new_line_after; break;
+		case 'O': *shortcut = shortcut_new_line_before; break;
+		case 'G': *shortcut = shortcut_goto_buffer_end; break;
+		case 'v': *shortcut = shortcut_visual_mode; break;
+		case 'V': *shortcut = shortcut_visual_mode_line; break;
+
+		default: {
+			
+			// window operations
+			if (strcmp(normal_buffer, "^Wv") == 0) { *shortcut = shortcut_split_vertically; break; }
+			else if (strcmp(normal_buffer, "^W^V") == 0) { *shortcut = shortcut_split_vertically; break; }
+			else if (strcmp(normal_buffer, "^Ws") == 0) { *shortcut = shortcut_split_horizontally; break; }
+			else if (strcmp(normal_buffer, "^W^S") == 0) { *shortcut = shortcut_split_horizontally; break; }
+			else if (strcmp(normal_buffer, "^Wl") == 0) { *shortcut = shortcut_next_pane; break; }
+			else if (strcmp(normal_buffer, "^W^L") == 0) { *shortcut = shortcut_next_pane; break; }
+			else if (strcmp(normal_buffer, "^Wh") == 0) { *shortcut = shortcut_prev_pane; break; }
+			else if (strcmp(normal_buffer, "^W^H") == 0) { *shortcut = shortcut_prev_pane; break; }
+
+			else {
+				// two letter shortcuts
+				char c1 = normal_buffer[0];
+				if (normal_index == 2 && !isdigit(c1)) {
+					char c2 = normal_buffer[1];
+
+					if (c1 == 'g' && c2 == 'g') {
+						shortcut_fn_goto_buffer_begin();
+						shortcut_fn_normal_mode_clear();
+						return false;
+					} else if (c1 == 'd') {
+						if (c2 == 'd') {
+							u32 from = cursor_get_beginning_of_line(current_buffer, current_buffer->cursor);
+							u32 to = cursor_get_beginning_of_next_line(current_buffer, current_buffer->cursor);
+							
+							buffer_delete_multiple(current_buffer, from, (to - from));
+
+							shortcut_fn_normal_mode_clear();
+							return false;
+						} else if (c2 == 'w') {
+							u32 from = current_buffer->cursor;
+							u32 to = cursor_get_next_word(current_buffer, current_buffer->cursor);
+
+							buffer_delete_multiple(current_buffer, from, (to - from));
+
+							shortcut_fn_normal_mode_clear();
+							return false;
+						} else  {
+							return false;
+						}
+					} else if (c1 == 'c' && c2 == 'w') {
+						u32 from = current_buffer->cursor;
+						u32 to = cursor_get_end_of_word(current_buffer, current_buffer->cursor);
+
+						buffer_delete_multiple(current_buffer, from, (to - from) + 1);
+
+						shortcut_fn_normal_mode_clear();
+						shortcut_fn_insert_mode(); 
+						return false;
+					} else {
+						return false;
+					}
+				} else {
+					// number followed by command
+
+					if (isdigit(normal_buffer[0])) {
+						u32 end = 0;
+
+						while (isdigit(normal_buffer[end])) {
+							end++;
+						}
+
+						char number_str[MAX_NUMBER_LENGTH];
+						memcpy(number_str, normal_buffer, end);
+						number_str[end] = 0;
+						u32 number = atoi(number_str);
+
+        				if (end < strlen(normal_buffer)) {
+							char dir = normal_buffer[end];
+							if (dir == 'j') {
+								for (u32 i = 0; i < number; ++i) {
+									shortcut_fn_next_line();
+								}
+							} else if (dir == 'k') {
+								for (u32 i = 0; i < number; ++i) {
+									shortcut_fn_prev_line();
+								}
+							}
+
+							shortcut_fn_normal_mode_clear();
+						}
+					}
+
+					return false;
+				}
+			}
+		}
+	}
+
+	return true;
 }

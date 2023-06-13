@@ -28,7 +28,26 @@ void command_execute(char *command, char args[MAX_TOKENS][MAX_TOKEN_LENGTH], u32
         read_file_to_buffer(target_buffer);
     } else if (strcmp(command, "q") == 0) {
         global_running = false;
-    }
+    } else if (isdigit(command[0])) {
+        u32 end = 0;
+        while (isdigit(command[end])) {
+            end++;
+        }
+
+        char number_str[MAX_NUMBER_LENGTH];
+        memcpy(number_str, command, end);
+        number_str[end] = 0;
+        u32 number = atoi(number_str);
+
+        if (number > 0) {
+            number -= 1;
+        }
+
+        shortcut_fn_goto_buffer_begin();
+        for (u32 i = 0; i < number; ++i) {
+            shortcut_fn_next_line();
+        }
+     }
 }
 
 void command_parse_and_run() {
