@@ -74,8 +74,7 @@ struct Renderer {
 char *read_entire_file(const char *file_path) {
 	FILE *file = fopen(file_path, "rb");
 	if (!file) {
-		printf("Failed to open file '%s'!\n", file_path);
-		exit(1);
+		return 0;
 	}
 
 	fseek(file, 0, SEEK_END);
@@ -440,6 +439,16 @@ void shaders_init(Renderer *renderer) {
 	char *vertex_code = read_entire_file("resources/vert.glsl");
 	char *fragment_code = read_entire_file("resources/frag.glsl");
 
+	if (!vertex_code) {
+		puts("Failed to read resources/vert.glsl!");
+		exit(1);
+	}
+	
+	if (!fragment_code) {
+		puts("Failed to read resources/frag.glsl!");
+		exit(1);
+	}
+
 	GLuint vertex_shader = shader_load(vertex_code, GL_VERTEX_SHADER);
 	GLuint fragment_shader = shader_load(fragment_code, GL_FRAGMENT_SHADER);
 
@@ -542,7 +551,11 @@ void draw_buffer_resize(Renderer *renderer) {
 	glUniform2ui(renderer->shader_cell_size_slot, metrics.glyph_width, metrics.glyph_height);
 	glUniform2ui(renderer->shader_grid_size_slot, buffer->columns, buffer->rows);
 	glUniform2ui(renderer->shader_win_size_slot, width, height);
+
 	glUniform1ui(renderer->shader_background_color_slot, color_hex_from_rgb(settings.bg_temp));
+
+	glfwSwapInterval(settings.vsync ? 1 : 0);
+	glfwSetWindowOpacity(renderer->window, settings.opacity);
 }
 
 void draw_buffer_init(Renderer *renderer) {
@@ -795,6 +808,20 @@ void set_default_settings() {
 	settings.vsync = true;
 	settings.tab_width = 4;
 	settings.opacity = 1.0f;
+}
+
+void load_settings_file_or_set_default() {
+	FILE *f = fopen("config", "rb");
+	if (f) {
+		fread(settings.colors, sizeof(u32), COLOR_COUNT, f);
+		fread(&settings.vsync, sizeof(bool), 1, f);
+		fread(&settings.tab_width, sizeof(u32), 1, f);
+		fread(&settings.opacity, sizeof(f32), 1, f);
+
+		fclose(f);
+	} else {
+		set_default_settings();
+	}
 
 	color_set_rgb_from_hex(settings.bg_temp, settings.colors[COLOR_BG]);
 	color_set_rgb_from_hex(settings.fg_temp, settings.colors[COLOR_FG]);
@@ -807,9 +834,23 @@ void set_default_settings() {
 	color_set_rgb_from_hex(settings.selection_temp, settings.colors[COLOR_SELECTION]);
 }
 
+void save_settings() {
+	FILE *f = fopen("config", "wb");
+	if (!f) {
+		return;
+	}
+
+	fwrite(settings.colors, sizeof(u32), COLOR_COUNT, f);
+	fwrite(&settings.vsync, sizeof(bool), 1, f);
+	fwrite(&settings.tab_width, sizeof(u32), 1, f);
+	fwrite(&settings.opacity, sizeof(f32), 1, f);
+
+	fclose(f);
+}
+
 int main() {
 	create_default_keymaps();
-	set_default_settings();
+	load_settings_file_or_set_default();
 
 	current_buffer = buffer_create(32);
 	pane_create({0, 0, 30, 20}, current_buffer);
@@ -875,5 +916,8 @@ int main() {
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
 	glfwTerminate();
+
+	save_settings();
+
 	return 0;
 }
