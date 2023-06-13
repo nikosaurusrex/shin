@@ -171,6 +171,7 @@ void buffer_delete_multiple(Buffer *buffer, u32 pos, u32 count) {
 	if (pos < buffer_length(buffer)) {
 		buffer_shift_gap_to_position(buffer, pos);
 		buffer->gap_end += count;
+		buffer->gap_end = MIN(buffer->gap_end, buffer->size);
 
 		if (buffer->cursor > pos) {
 			u32 new_cursor = buffer->cursor - count;
