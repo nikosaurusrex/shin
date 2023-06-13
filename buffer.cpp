@@ -378,8 +378,10 @@ void pane_update_scroll(Pane *pane) {
 	u32 start = MIN(buffer_length(buffer), pane->start);
 	u32 end = MIN(buffer_length(buffer), pane->end);
 
-	if (buffer->cursor < start) {
-		while (start > buffer->cursor) {
+	u32 cursor = (s32)(buffer->cursor) + buffer->cursor_width;
+
+	if (cursor < start) {
+		while (start > cursor) {
 			start = cursor_get_beginning_of_prev_line(buffer, start);
 		}
 
@@ -390,8 +392,8 @@ void pane_update_scroll(Pane *pane) {
 		}
 	}
 
-	if (buffer->cursor > end) {
-		while (end < buffer->cursor) {
+	if (cursor > end) {
+		while (end < cursor) {
 			end = cursor_get_end_of_next_line(buffer, end);
 		}
 

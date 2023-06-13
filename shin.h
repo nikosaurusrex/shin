@@ -219,6 +219,7 @@ struct Settings {
 	u32 colors[COLOR_COUNT];
 	bool vsync;
 	u32 tab_width;
+    f32 opacity;
 
 	bool show;
 

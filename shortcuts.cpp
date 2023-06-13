@@ -231,16 +231,104 @@ SHORTCUT(visual_mode) {
 	current_buffer->cursor_width = 0;
 }
 
-SHORTCUT(cursor_width_increase) {
+SHORTCUT(visual_mode_line) {
+	Buffer *buffer = current_buffer;
+
+	buffer->mode = MODE_VISUAL;
+
+	u32 end = cursor_get_end_of_line(buffer, buffer->cursor);
+	buffer->cursor = cursor_get_beginning_of_line(buffer, buffer->cursor);
+	buffer->cursor_width = end - buffer->cursor;
+}
+
+SHORTCUT(visual_next) {
 	if (current_buffer->cursor + current_buffer->cursor_width < buffer_length(current_buffer)) {
 		current_buffer->cursor_width++;
 	}
 }
 
-SHORTCUT(cursor_width_decrease) {
+SHORTCUT(visual_back) {
 	if (current_buffer->cursor + current_buffer->cursor_width > 0) {
 		current_buffer->cursor_width--;
 	}
+}
+
+SHORTCUT(visual_next_line) {
+	Buffer *buffer = current_buffer;
+
+	u32 cursor = (s32)(buffer->cursor) + buffer->cursor_width;
+	u32 column = cursor_get_column(buffer, cursor);
+	u32 beginning_of_next_line = cursor_get_beginning_of_next_line(buffer, cursor);
+	u32 next_line_length = buffer_line_length(buffer, beginning_of_next_line);
+
+	u32 end = beginning_of_next_line + MIN(next_line_length, column);
+
+	buffer->cursor_width += end - cursor;
+}
+
+
+SHORTCUT(visual_prev_line) {
+	Buffer *buffer = current_buffer;
+
+	u32 cursor = (s32)(buffer->cursor) + buffer->cursor_width;
+
+	u32 column = cursor_get_column(buffer, cursor);
+	u32 beginning_of_prev_line = cursor_get_beginning_of_prev_line(buffer, cursor);
+	u32 prev_line_length = buffer_line_length(buffer, beginning_of_prev_line);
+
+	u32 end = beginning_of_prev_line + MIN(prev_line_length, column);
+
+	buffer->cursor_width -= cursor - end;
+}
+ 
+SHORTCUT(visual_word_next) {
+	Buffer *buffer = current_buffer;
+	u32 cursor = (s32)(buffer->cursor) + buffer->cursor_width;
+	u32 end = cursor_get_next_word(buffer, cursor);
+
+	buffer->cursor_width += end - cursor;
+}
+
+SHORTCUT(visual_word_end) {
+	Buffer *buffer = current_buffer;
+	u32 cursor = (s32)(buffer->cursor) + buffer->cursor_width;
+	
+	u32 end;
+	if (isspace(buffer_get_char(buffer, cursor))) {
+		end = cursor_get_next_word(buffer, cursor);
+	} else if (cursor + 1 < buffer_length(buffer) &&
+			   isspace(buffer_get_char(buffer, cursor + 1))) {
+		end = cursor_get_next_word(buffer, cursor);
+	}  else {
+		end = cursor_get_end_of_word(buffer, cursor);
+	}
+	
+	buffer->cursor_width += end - cursor;
+}	
+
+SHORTCUT(visual_word_prev) {
+	Buffer *buffer = current_buffer;
+	u32 cursor = (s32)(buffer->cursor) + buffer->cursor_width;
+
+	u32 end;
+	if (isspace(buffer_get_char(buffer, cursor))) {
+		end = cursor_get_prev_word(buffer, cursor);
+	} else if (cursor - 1 >= 0 &&
+			   isspace(buffer_get_char(buffer, cursor - 1))) {
+		end = cursor_get_prev_word(buffer, cursor);
+	}  else {
+		end = cursor_get_beginning_of_word(buffer, cursor);
+	}
+	
+	buffer->cursor_width -= cursor - end;
+}
+
+
+SHORTCUT(visual_delete) {
+	Buffer *buffer = current_buffer;
+	buffer_delete_multiple(buffer, buffer->cursor, buffer->cursor_width + 1);
+	buffer->mode = MODE_NORMAL;
+	buffer->cursor_width = 0;
 }
 
 Shortcut *keymap_get_shortcut(Keymap *keymap, u16 key_comb) {

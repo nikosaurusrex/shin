@@ -252,7 +252,8 @@ void create_default_keymaps() {
 	keymap->shortcuts['G'] = shortcut_start_multi_key_shortcut;
 	keymap->shortcuts['C'] = shortcut_start_multi_key_shortcut;
 	keymap->shortcuts['D'] = shortcut_start_multi_key_shortcut;
-	keymap->shortcuts['V' | SHIFT] = shortcut_visual_mode;
+	keymap->shortcuts['V'] = shortcut_visual_mode;
+	keymap->shortcuts['V' | SHIFT] = shortcut_visual_mode_line;
 
 	keymaps[MODE_NORMAL] = keymap;
 	
@@ -284,8 +285,14 @@ void create_default_keymaps() {
 	// visual keymap
 	keymap = keymap_create_empty();
 
-	keymap->shortcuts['L'] = shortcut_cursor_width_increase;
-	keymap->shortcuts['H'] = shortcut_cursor_width_decrease;
+	keymap->shortcuts['L'] = shortcut_visual_next;
+	keymap->shortcuts['H'] = shortcut_visual_back;
+	keymap->shortcuts['J'] = shortcut_visual_next_line;
+	keymap->shortcuts['K'] = shortcut_visual_prev_line;
+	keymap->shortcuts['W'] = shortcut_visual_word_next;
+	keymap->shortcuts['E'] = shortcut_visual_word_end;
+	keymap->shortcuts['B'] = shortcut_visual_word_prev;
+	keymap->shortcuts['D'] = shortcut_visual_delete;
 	keymap->shortcuts[GLFW_KEY_ESCAPE] = shortcut_normal_mode;
 
 	keymaps[MODE_VISUAL] = keymap;
@@ -372,8 +379,11 @@ void window_resize(GLFWwindow *window, s32 width, s32 height) {
 GLFWwindow *window_create(Renderer *renderer, u32 width, u32 height) {
 	glfwInit();
 
+	glfwDefaultWindowHints();
+
+	glfwWindowHint(GLFW_TRANSPARENT_FRAMEBUFFER, GLFW_TRUE);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
 	glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
 #ifdef __APPLE__
@@ -401,7 +411,7 @@ GLFWwindow *window_create(Renderer *renderer, u32 width, u32 height) {
     ImGui::StyleColorsDark();
 
     ImGui_ImplGlfw_InitForOpenGL(window, true);
-	const char* glsl_version = "#version 410 core";
+	const char* glsl_version = "#version 430 core";
     ImGui_ImplOpenGL3_Init(glsl_version);
 
 	return window;
@@ -595,7 +605,7 @@ void renderer_render_pane(Renderer *renderer, Pane *pane, bool is_active_pane) {
 	Highlight highlight;
 	bool has_highlights = highlight_index < pane->highlights.length;
 
-	u32 render_cursor = 0;
+	u32 render_cursor = pane->start;
 
 	for (pos = start; pos < buffer_length(buffer) && lines_drawn < bounds.height - 1; pos = cursor_next(buffer, pos)) {
 		u32 prev_pos = pos;
@@ -620,7 +630,7 @@ void renderer_render_pane(Renderer *renderer, Pane *pane, bool is_active_pane) {
 			cell->background = settings.colors[COLOR_BG];
 			cell->foreground = settings.colors[COLOR_FG];
 			cell->glyph_flags = 0;
-
+			
 			if (has_highlights) {
 				bool in_highlight = highlight.start <= render_cursor && render_cursor <= highlight.end;
 				if (in_highlight) {
@@ -637,18 +647,11 @@ void renderer_render_pane(Renderer *renderer, Pane *pane, bool is_active_pane) {
 				}
 			}
 
-			if (ch == '\t') {
-				render_x += settings.tab_width;
-			} else {
-				render_x++;
-			}
-
-			u32 absolute_render_cursor = pane->start + render_cursor;
 			u32 render_cursor_start = MIN(buffer->cursor, buffer->cursor + buffer->cursor_width);
 			u32 render_cursor_end = MAX(buffer->cursor, buffer->cursor + buffer->cursor_width);
 
-			if (absolute_render_cursor >= render_cursor_start &&
-				absolute_render_cursor <= render_cursor_end &&
+			if (render_cursor >= render_cursor_start &&
+				render_cursor <= render_cursor_end &&
 				is_active_pane) {
 
 				if (current_buffer->mode == MODE_VISUAL) {
@@ -657,6 +660,15 @@ void renderer_render_pane(Renderer *renderer, Pane *pane, bool is_active_pane) {
 					cell->glyph_flags |= GLYPH_INVERT;
 				}
  				has_drawn_cursor = true;
+			}
+
+			if (ch == '\t') {
+				for (u32 k = 1; k < settings.tab_width; ++k) {
+					draw_buffer->cells[render_x + k + render_y * draw_buffer->columns].background = cell->background;
+				}
+				render_x += settings.tab_width;
+			} else {
+				render_x++;
 			}
 
 			render_cursor++;
@@ -749,6 +761,7 @@ void render_settings_window(Renderer *renderer, GLFWwindow *window) {
 	ImGui::ColorEdit3("Comment color", settings.comment_temp, ImGuiColorEditFlags_NoInputs);
 	ImGui::ColorEdit3("Selection color", settings.selection_temp, ImGuiColorEditFlags_NoInputs);
 	ImGui::Checkbox("Vsync", &settings.vsync);
+	ImGui::DragFloat("Opacity", &settings.opacity, 0.05f, 0.1f, 1.0f);
 
 	settings.colors[COLOR_BG] = color_hex_from_rgb(settings.bg_temp);
 	settings.colors[COLOR_FG] = color_hex_from_rgb(settings.fg_temp);
@@ -763,6 +776,7 @@ void render_settings_window(Renderer *renderer, GLFWwindow *window) {
 	glUniform1ui(renderer->shader_background_color_slot, color_hex_from_rgb(settings.bg_temp));
 
 	glfwSwapInterval(settings.vsync ? 1 : 0);
+	glfwSetWindowOpacity(window, settings.opacity);
 
 	ImGui::End();
 }
@@ -780,6 +794,7 @@ void set_default_settings() {
 
 	settings.vsync = true;
 	settings.tab_width = 4;
+	settings.opacity = 1.0f;
 
 	color_set_rgb_from_hex(settings.bg_temp, settings.colors[COLOR_BG]);
 	color_set_rgb_from_hex(settings.fg_temp, settings.colors[COLOR_FG]);
