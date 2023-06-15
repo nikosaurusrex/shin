@@ -1,11 +1,11 @@
+#include "shin.h"
+
+#include <glfw/glfw3.h>
+
 #define SHORTCUT(name) \
 	void shortcut_fn_##name(); \
 	Shortcut shortcut_##name = {#name, shortcut_fn_##name}; \
 	void shortcut_fn_##name()
-
-#define CTRL  (1 << 8)
-#define ALT   (1 << 9)
-#define SHIFT (1 << 10)
 
 #define MAX_NORMAL_LENGTH 16
 static char normal_buffer[MAX_NORMAL_LENGTH];
@@ -63,7 +63,6 @@ SHORTCUT(insert_mode_next) {
 	current_buffer->mode = MODE_INSERT;
 	current_buffer->cursor = cursor_next(current_buffer, current_buffer->cursor);
 }
-
 
 SHORTCUT(next_line) {
 	Buffer *buffer = current_buffer;
@@ -307,7 +306,6 @@ SHORTCUT(visual_word_prev) {
 	buffer->cursor_width -= cursor - end;
 }
 
-
 SHORTCUT(visual_delete) {
 	Buffer *buffer = current_buffer;
 	buffer_delete_multiple(buffer, buffer->cursor, buffer->cursor_width + 1);
@@ -315,8 +313,30 @@ SHORTCUT(visual_delete) {
 	buffer->cursor_width = 0;
 }
 
+SHORTCUT(begin_command) {
+    begin_command();
+}
+
+SHORTCUT(command_confirm) {
+	command_confirm();
+}
+
+SHORTCUT(command_exit) {
+    command_exit();
+}
+
+SHORTCUT(command_insert_char) {
+	command_insert_char();
+}
+
+SHORTCUT(command_delete) {
+    command_delete();
+}
+
 Shortcut *keymap_get_shortcut(Keymap *keymap, u16 key_comb) {
-	assert(key_comb < MAX_KEY_COMBINATIONS);
+	if (key_comb >= MAX_KEY_COMBINATIONS) {
+		return keymap->shortcuts;
+	}
 	return keymap->shortcuts + key_comb;
 }
 
@@ -451,4 +471,69 @@ bool normal_mode_get_shortcut(Shortcut *shortcut) {
 	}
 
 	return true;
+}
+
+void create_default_keymaps() {
+	// insert keymap
+	Keymap *keymap = keymap_create_empty();
+
+	for (char ch = ' '; ch <= '~'; ++ch) {
+		if (ch == ':') continue;
+		keymap->shortcuts[ch] = shortcut_insert_char;
+		keymap->shortcuts[ch | SHIFT] = shortcut_insert_char;
+	}
+	keymap->shortcuts[GLFW_KEY_ENTER] = shortcut_insert_new_line;
+	keymap->shortcuts[GLFW_KEY_TAB] = shortcut_insert_tab;
+	keymap->shortcuts[GLFW_KEY_DELETE] = shortcut_delete_forwards;
+	keymap->shortcuts[GLFW_KEY_BACKSPACE] = shortcut_delete_backwards;
+	keymap->shortcuts[GLFW_KEY_BACKSPACE | SHIFT] = shortcut_delete_backwards;
+	keymap->shortcuts[GLFW_KEY_LEFT] = shortcut_cursor_back;
+	keymap->shortcuts[GLFW_KEY_RIGHT] = shortcut_cursor_next;
+	keymap->shortcuts[GLFW_KEY_F4 | ALT] = shortcut_quit;
+	keymap->shortcuts[GLFW_KEY_ESCAPE] = shortcut_normal_mode;
+
+	keymaps[MODE_INSERT] = keymap;
+	
+	// normal keymap
+	keymap = keymap_create_empty();
+
+	for (char ch = ' '; ch <= '~'; ++ch) {
+		keymap->shortcuts[ch] = shortcut_normal_insert;
+		keymap->shortcuts[ch | SHIFT] = shortcut_normal_insert;
+		keymap->shortcuts[ch | CTRL] = shortcut_normal_insert;
+	}
+	keymap->shortcuts[GLFW_KEY_F4 | ALT] = shortcut_quit;
+	keymap->shortcuts[GLFW_KEY_F3] = shortcut_show_settings;
+	keymap->shortcuts[':' | SHIFT] = shortcut_begin_command;
+	keymap->shortcuts[GLFW_KEY_ESCAPE] = shortcut_normal_mode_clear;
+
+	keymaps[MODE_NORMAL] = keymap;
+	
+	// command keymap
+	keymap = keymap_create_empty();
+
+	for (char ch = ' '; ch <= '~'; ++ch) {
+		keymap->shortcuts[ch] = shortcut_command_insert_char;
+		keymap->shortcuts[ch | SHIFT] = shortcut_command_insert_char;
+	}
+	keymap->shortcuts[GLFW_KEY_BACKSPACE] = shortcut_command_delete;
+	keymap->shortcuts[GLFW_KEY_ENTER] = shortcut_command_confirm;
+	keymap->shortcuts[GLFW_KEY_ESCAPE] = shortcut_command_exit;
+
+	keymaps[MODE_COMMAND] = keymap;
+
+	// visual keymap
+	keymap = keymap_create_empty();
+
+	keymap->shortcuts['L'] = shortcut_visual_next;
+	keymap->shortcuts['H'] = shortcut_visual_back;
+	keymap->shortcuts['J'] = shortcut_visual_next_line;
+	keymap->shortcuts['K'] = shortcut_visual_prev_line;
+	keymap->shortcuts['W'] = shortcut_visual_word_next;
+	keymap->shortcuts['E'] = shortcut_visual_word_end;
+	keymap->shortcuts['B'] = shortcut_visual_word_prev;
+	keymap->shortcuts['D'] = shortcut_visual_delete;
+	keymap->shortcuts[GLFW_KEY_ESCAPE] = shortcut_normal_mode;
+
+	keymaps[MODE_VISUAL] = keymap;
 }

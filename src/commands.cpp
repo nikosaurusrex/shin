@@ -1,3 +1,5 @@
+#include "shin.h"
+
 #define MAX_COMMAND_LENGTH 256
 #define MAX_TOKEN_LENGTH 128
 #define MAX_TOKENS 4
@@ -7,20 +9,17 @@ static u32 command_cursor = 0;
 
 void command_execute(char *command, char args[MAX_TOKENS][MAX_TOKEN_LENGTH], u32 args_count) {
     Pane *active_pane = &pane_pool[active_pane_index];
+    Buffer *target_buffer = active_pane->buffer;
 
     /* TODO: rework with good system */
     
     if (strcmp(command, "w") == 0) {
-        Buffer *target_buffer = active_pane->buffer;
-
         if (args_count > 0) {
             free(target_buffer->file_path);
             target_buffer->file_path = strdup(args[0]);
         }
         write_buffer_to_file(target_buffer);
     } else if (strcmp(command, "find") == 0) {
-        Buffer *target_buffer = active_pane->buffer;
-
         if (args_count > 0) {
             free(target_buffer->file_path);
             target_buffer->file_path = strdup(args[0]);
@@ -43,9 +42,9 @@ void command_execute(char *command, char args[MAX_TOKENS][MAX_TOKEN_LENGTH], u32
             number -= 1;
         }
 
-        shortcut_fn_goto_buffer_begin();
+        buffer_goto_beginning(target_buffer);
         for (u32 i = 0; i < number; ++i) {
-            shortcut_fn_next_line();
+            buffer_goto_next_line(target_buffer);
         }
      }
 }
@@ -94,26 +93,26 @@ void command_parse_and_run() {
     }
 }
 
-SHORTCUT(begin_command) {
+void begin_command() {
     current_buffer->mode = MODE_COMMAND;
     command_buffer[0] = ':';
     command_cursor = 1;
 }
 
-SHORTCUT(command_confirm) {
+void command_confirm() {
 	command_parse_and_run();
     command_cursor = 0;
 
     current_buffer->mode = MODE_NORMAL;
 }
 
-SHORTCUT(command_exit) {
+void command_exit() {
     command_cursor = 0;
 
     current_buffer->mode = MODE_NORMAL;
 }
 
-SHORTCUT(command_insert_char) {
+void command_insert_char() {
     command_buffer[command_cursor] = last_input_event.ch;
     command_cursor++;
     if (command_cursor >= MAX_COMMAND_LENGTH) {
@@ -121,9 +120,17 @@ SHORTCUT(command_insert_char) {
     }
 }
 
-SHORTCUT(command_delete) {
+void command_delete() {
     command_cursor--;
     if (command_cursor <= 1) {
         command_cursor = 1;
     }
+}
+
+u32 command_get_cursor() {
+    return command_cursor;
+}
+
+char command_buffer_get(u32 i) {
+    return command_buffer[i];
 }

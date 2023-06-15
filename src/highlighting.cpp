@@ -1,3 +1,5 @@
+#include "shin.h"
+
 #define ID_MAX_LENGTH 256
 
 /* TODO: better solution */

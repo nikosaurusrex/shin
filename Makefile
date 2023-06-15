@@ -22,23 +22,31 @@ else
 	endif
 endif
 
-CXXFLAGS += -O3 -std=c++20 
+CXXFLAGS += -O3 -std=c++20 -MMD
 
 BUILD_DIR = build
 IMGUI_DIR = extern/imgui
+SRC_DIR = src
 
 IMGUI_FILES = $(wildcard $(IMGUI_DIR)/*.cpp)
+SRC_FILES = $(wildcard $(SRC_DIR)/*.cpp)
 OBJ_FILES = $(patsubst $(IMGUI_DIR)/%.cpp, $(BUILD_DIR)/%.o, $(IMGUI_FILES))
+OBJ_FILES += $(patsubst $(SRC_DIR)/%.cpp, $(BUILD_DIR)/%.o, $(SRC_FILES))
+DEP_FILES = $(OBJ_FILES:.o=.d)
 
 all: $(EXEC)
 
 .PHONY: clean
 clean:
-	rm -f $(EXEC) imgui.ini $(OBJ_FILES) build/shin.o
+	rm -f $(EXEC) imgui.ini $(OBJ_FILES)
 
 $(BUILD_DIR)/%.o: $(IMGUI_DIR)/%.cpp
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
-$(EXEC): $(OBJ_FILES) shin.cpp shin.h buffer.cpp commands.cpp shortcuts.cpp highlighting.cpp
-	$(CXX) $(CXXFLAGS) -c -o build/shin.o shin.cpp
-	$(CXX) $(LDFLAGS) -o $(EXEC) build/shin.o $(OBJ_FILES) 
+$(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp
+	$(CXX) $(CXXFLAGS) -c -o $@ $<
+
+$(EXEC): $(OBJ_FILES)
+	$(CXX) $(LDFLAGS) -o $(EXEC) $(OBJ_FILES) 
+
+-include $(DEP_FILES)

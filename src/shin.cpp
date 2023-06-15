@@ -1,8 +1,4 @@
 #include "shin.h"
-#include "buffer.cpp"
-#include "shortcuts.cpp"
-#include "commands.cpp"
-#include "highlighting.cpp"
 
 #ifdef _WIN32
 #define GLEW_STATIC
@@ -18,9 +14,9 @@
 #include <ft2build.h>
 #include FT_FREETYPE_H
 
-#include "extern/imgui/imgui.h"
-#include "extern/imgui/imgui_impl_glfw.h"
-#include "extern/imgui/imgui_impl_opengl3.h"
+#include "../extern/imgui/imgui.h"
+#include "../extern/imgui/imgui_impl_glfw.h"
+#include "../extern/imgui/imgui_impl_opengl3.h"
 
 #define GLYPH_MAP_COUNT_X 32
 #define GLYPH_MAP_COUNT_Y 16
@@ -70,6 +66,20 @@ struct Renderer {
 	GLint shader_time_slot;
 	GLint shader_background_color_slot;
 };
+
+/* TODO: Clean up globals */
+Buffer *current_buffer;
+InputEvent last_input_event;
+
+#define MAX_PANES 12
+Pane pane_pool[MAX_PANES];
+u32 pane_count = 0;
+u32 active_pane_index = 0;
+
+Keymap *keymaps[MODES_COUNT];
+
+Settings settings;
+bool global_running = true;
 
 char *read_entire_file(const char *file_path) {
 	FILE *file = fopen(file_path, "rb");
@@ -206,72 +216,6 @@ GlyphMap *glyph_map_create(FT_Library ft, const char *font, u32 pixel_size) {
 
 	return map;
 }
-
-void create_default_keymaps() {
-	// insert keymap
-	Keymap *keymap = keymap_create_empty();
-
-	for (char ch = ' '; ch <= '~'; ++ch) {
-		if (ch == ':') continue;
-		keymap->shortcuts[ch] = shortcut_insert_char;
-		keymap->shortcuts[ch | SHIFT] = shortcut_insert_char;
-	}
-	keymap->shortcuts[GLFW_KEY_ENTER] = shortcut_insert_new_line;
-	keymap->shortcuts[GLFW_KEY_TAB] = shortcut_insert_tab;
-	keymap->shortcuts[GLFW_KEY_DELETE] = shortcut_delete_forwards;
-	keymap->shortcuts[GLFW_KEY_BACKSPACE] = shortcut_delete_backwards;
-	keymap->shortcuts[GLFW_KEY_BACKSPACE | SHIFT] = shortcut_delete_backwards;
-	keymap->shortcuts[GLFW_KEY_LEFT] = shortcut_cursor_back;
-	keymap->shortcuts[GLFW_KEY_RIGHT] = shortcut_cursor_next;
-	keymap->shortcuts[GLFW_KEY_F4 | ALT] = shortcut_quit;
-	keymap->shortcuts[GLFW_KEY_ESCAPE] = shortcut_normal_mode;
-
-	keymaps[MODE_INSERT] = keymap;
-	
-	// normal keymap
-	keymap = keymap_create_empty();
-
-	for (char ch = ' '; ch <= '~'; ++ch) {
-		keymap->shortcuts[ch] = shortcut_normal_insert;
-		keymap->shortcuts[ch | SHIFT] = shortcut_normal_insert;
-		keymap->shortcuts[ch | CTRL] = shortcut_normal_insert;
-	}
-	keymap->shortcuts[GLFW_KEY_F4 | ALT] = shortcut_quit;
-	keymap->shortcuts[GLFW_KEY_F3] = shortcut_show_settings;
-	keymap->shortcuts[':' | SHIFT] = shortcut_begin_command;
-	keymap->shortcuts[GLFW_KEY_ESCAPE] = shortcut_normal_mode_clear;
-
-	keymaps[MODE_NORMAL] = keymap;
-	
-	// command keymap
-	keymap = keymap_create_empty();
-
-	for (char ch = ' '; ch <= '~'; ++ch) {
-		keymap->shortcuts[ch] = shortcut_command_insert_char;
-		keymap->shortcuts[ch | SHIFT] = shortcut_command_insert_char;
-	}
-	keymap->shortcuts[GLFW_KEY_BACKSPACE] = shortcut_command_delete;
-	keymap->shortcuts[GLFW_KEY_ENTER] = shortcut_command_confirm;
-	keymap->shortcuts[GLFW_KEY_ESCAPE] = shortcut_command_exit;
-
-	keymaps[MODE_COMMAND] = keymap;
-
-	// visual keymap
-	keymap = keymap_create_empty();
-
-	keymap->shortcuts['L'] = shortcut_visual_next;
-	keymap->shortcuts['H'] = shortcut_visual_back;
-	keymap->shortcuts['J'] = shortcut_visual_next_line;
-	keymap->shortcuts['K'] = shortcut_visual_prev_line;
-	keymap->shortcuts['W'] = shortcut_visual_word_next;
-	keymap->shortcuts['E'] = shortcut_visual_word_end;
-	keymap->shortcuts['B'] = shortcut_visual_word_prev;
-	keymap->shortcuts['D'] = shortcut_visual_delete;
-	keymap->shortcuts[GLFW_KEY_ESCAPE] = shortcut_normal_mode;
-
-	keymaps[MODE_VISUAL] = keymap;
-}
-
 
 void key_callback(GLFWwindow* window, s32 key, s32 scancode, s32 action, s32 mods) {
 	if (action != GLFW_PRESS && action != GLFW_REPEAT) {
@@ -737,15 +681,15 @@ void renderer_render(Renderer *renderer) {
 	// command textbox
 	if (current_buffer->mode == MODE_COMMAND) {
 		u32 start = (draw_buffer->rows - 1) * draw_buffer->columns;
-		for (u32 i = 0; i < MIN(command_cursor, draw_buffer->columns); ++i) {
+		for (u32 i = 0; i < MIN(command_get_cursor(), draw_buffer->columns); ++i) {
 			Cell *cell = &draw_buffer->cells[start + i];
 
-			cell->glyph_index = command_buffer[i] - 32;
+			cell->glyph_index = command_buffer_get(i) - 32;
 			cell->background = settings.colors[COLOR_BG];
 			cell->foreground = settings.colors[COLOR_FG];
 			cell->glyph_flags = 0;
 		}
-		draw_buffer->cells[start + command_cursor].glyph_flags |= GLYPH_INVERT;
+		draw_buffer->cells[start + command_get_cursor()].glyph_flags |= GLYPH_INVERT;
 	}
 }
 

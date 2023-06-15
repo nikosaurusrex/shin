@@ -1,3 +1,5 @@
+#include "shin.h"
+
 Buffer *buffer_create(u32 size) {
 	Buffer *buffer = (Buffer *) malloc(sizeof(Buffer));
 
@@ -19,27 +21,27 @@ void buffer_destroy(Buffer *buffer) {
 	free(buffer);
 }
 
-INLINE u32 buffer_gap_size(Buffer *buffer) {
+u32 buffer_gap_size(Buffer *buffer) {
 	return buffer->gap_end - buffer->gap_start;
 }
 
-INLINE u32 buffer_length(Buffer *buffer) {
+u32 buffer_length(Buffer *buffer) {
 	return buffer->size - buffer_gap_size(buffer);
 }
 
-INLINE u32 buffer_data_index(Buffer *buffer, u32 cursor) {
+u32 buffer_data_index(Buffer *buffer, u32 cursor) {
 	return (cursor < buffer->gap_start) ? cursor : (cursor + buffer_gap_size(buffer));
 }
 
-INLINE char buffer_get_char(Buffer *buffer, u32 cursor) {
+char buffer_get_char(Buffer *buffer, u32 cursor) {
 	return buffer->data[buffer_data_index(buffer, cursor)];
 }
 
-INLINE void buffer_set_char(Buffer *buffer, u32 cursor, char ch) {
+void buffer_set_char(Buffer *buffer, u32 cursor, char ch) {
 	buffer->data[buffer_data_index(buffer, cursor)] = ch;
 }
 
-INLINE void buffer_set_cursor(Buffer *buffer, u32 cursor) {
+void buffer_set_cursor(Buffer *buffer, u32 cursor) {
 	buffer->cursor = MIN(cursor, buffer_length(buffer));
 }
 
@@ -183,6 +185,18 @@ void buffer_delete_multiple(Buffer *buffer, u32 pos, u32 count) {
 	}
 }
 
+void buffer_goto_beginning(Buffer *buffer) {
+	buffer->cursor = 0;
+}
+
+void buffer_goto_next_line(Buffer *buffer) {
+	u32 column = cursor_get_column(buffer, buffer->cursor);
+	u32 beginning_of_next_line = cursor_get_beginning_of_next_line(buffer, buffer->cursor);
+	u32 next_line_length = buffer_line_length(buffer, beginning_of_next_line);
+
+	buffer_set_cursor(buffer, beginning_of_next_line + MIN(next_line_length, column));
+}
+
 u32 cursor_next(Buffer *buffer, u32 cursor) {
 	buffer_asserts(buffer);
 
@@ -235,27 +249,27 @@ u32 cursor_get_end_of_line(Buffer *buffer, u32 cursor) {
 	return buffer_length(buffer);
 }
 
-INLINE u32 cursor_get_beginning_of_next_line(Buffer *buffer, u32 cursor) {
+u32 cursor_get_beginning_of_next_line(Buffer *buffer, u32 cursor) {
 	return cursor_next(buffer, cursor_get_end_of_line(buffer, cursor));
 }
 
-INLINE u32 cursor_get_beginning_of_prev_line(Buffer *buffer, u32 cursor) {
+u32 cursor_get_beginning_of_prev_line(Buffer *buffer, u32 cursor) {
 	return cursor_get_beginning_of_line(buffer, cursor_back(buffer, cursor_get_beginning_of_line(buffer, cursor)));
 }
 
-INLINE u32 cursor_get_end_of_prev_line(Buffer *buffer, u32 cursor) {
+u32 cursor_get_end_of_prev_line(Buffer *buffer, u32 cursor) {
 	return cursor_back(buffer, cursor_get_beginning_of_line(buffer, cursor));
 }
 
-INLINE u32 cursor_get_end_of_next_line(Buffer *buffer, u32 cursor) {
+u32 cursor_get_end_of_next_line(Buffer *buffer, u32 cursor) {
 	return cursor_get_end_of_line(buffer, cursor_get_beginning_of_next_line(buffer, cursor));
 }
 
-INLINE u32 buffer_line_length(Buffer *buffer, u32 cursor) {
+u32 buffer_line_length(Buffer *buffer, u32 cursor) {
 	return cursor_get_end_of_line(buffer, cursor) - cursor_get_beginning_of_line(buffer, cursor);
 }
 
-INLINE u32 cursor_get_column(Buffer *buffer, u32 cursor) {
+u32 cursor_get_column(Buffer *buffer, u32 cursor) {
 	return cursor - cursor_get_beginning_of_line(buffer, cursor);
 }
 
