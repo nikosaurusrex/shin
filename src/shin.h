@@ -104,6 +104,7 @@ struct Settings {
 	bool hardware_rendering;
 
 	bool show;
+	bool last_hardware_rendering;
 
 	/* TODO: maybe rework this later */
 	f32 bg_temp[3];
@@ -150,35 +151,59 @@ struct Renderer {
 	DrawBuffer *buffer;
 	GlyphMap *glyph_map;
 
-	virtual void init(GLFWwindow *window, DrawBuffer *draw_buffer, GlyphMap *gylph_map) = 0;
-	virtual void query_cell_data() = 0;
-	virtual void query_settings(s32 width, s32 height) = 0;
-	virtual void update_time(f64 time) = 0;
+	void init(GLFWwindow *window, DrawBuffer *draw_buffer, GlyphMap *gylph_map);
+	virtual void reinit(s32 width, s32 height) = 0;
+	virtual void deinit() = 0;
+	virtual void resize(s32 width, s32 height) = 0;
 	virtual void end() = 0;
+	virtual void query_cell_data() = 0;
+	virtual void query_settings() = 0;
+	virtual void update_time(f64 time) = 0;
 };
 
 struct HardwareRenderer : Renderer {
+	u32 vao;
+	u32 vbo;
+	u32 program;
+	u32 glyph_texture;
+
 	s32 shader_glyph_map_slot;
-	s32 shader_cells_ssbo;
+	u32 shader_cells_ssbo;
 	s32 shader_cell_size_slot;
 	s32 shader_grid_size_slot;
 	s32 shader_win_size_slot;
 	s32 shader_time_slot;
 	s32 shader_background_color_slot;
 
-	void init(GLFWwindow *window, DrawBuffer *draw_buffer, GlyphMap *gylph_map);
-	void query_cell_data();
-	void query_settings(s32 width, s32 height);
-	void update_time(f64 time);
+	void reinit(s32 width, s32 height);
+	void deinit();
+	void resize(s32 width, s32 height);
 	void end();
+	void query_cell_data();
+	void query_settings();
+	void update_time(f64 time);
 };
 
 struct SoftwareRenderer : Renderer {
-	void init(GLFWwindow *window, DrawBuffer *draw_buffer, GlyphMap *gylph_map);
-	void query_cell_data();
-	void query_settings(s32 width, s32 height);
-	void update_time(f64 time);
+	u32 *screen = 0;
+	s32 width;
+	s32 height;
+
+	u32 vao;
+	u32 vbo;
+	u32 vto;
+	u32 program;
+	u32 texture;
+
+	void reinit(s32 width, s32 height);
+	void deinit();
+	void resize(s32 width, s32 height);
 	void end();
+	void query_cell_data();
+	void query_settings();
+	void update_time(f64 time);
+
+	void render_cell(Cell *cell, u32 column, u32 row);
 };
 
 // common functions
@@ -186,6 +211,11 @@ void read_file_to_buffer(Buffer *buffer);
 void write_buffer_to_file(Buffer *buffer);
 char *read_entire_file(const char *file_path);
 u32 color_hex_from_rgb(f32 rgb[3]);
+void color_set_rgb_from_hex(f32 rgb[3], u32 hex);
+u32 color_invert(u32 c);
+
+#define CHECK_OPENGL_ERROR() if (check_opengl_error()) printf("at %s:%d\n", __FILE__, __LINE__);
+bool check_opengl_error();
 
 // buffer functions
 Buffer *buffer_create(u32 size);

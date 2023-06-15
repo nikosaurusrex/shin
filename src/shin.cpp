@@ -102,6 +102,17 @@ u32 color_invert(u32 c) {
 	return 0xFFFFFFFF - c;
 }
 
+bool check_opengl_error() {
+    bool found_error = false;
+    int glErr = glGetError();
+    while (glErr != GL_NO_ERROR) {
+        printf("glError: %d\n", glErr);
+		found_error = true;
+        glErr = glGetError();
+    }
+    return found_error;
+}
+
 void key_callback(GLFWwindow* window, s32 key, s32 scancode, s32 action, s32 mods) {
 	if (action != GLFW_PRESS && action != GLFW_REPEAT) {
 		return;
@@ -412,7 +423,7 @@ void render(DrawBuffer *draw_buffer) {
 	}
 }
 
-Renderer *render_settings_window(GLFWwindow *window, HardwareRenderer *hwr, SoftwareRenderer *swr) {
+Renderer *render_settings_window(GLFWwindow *window, Renderer *renderer, HardwareRenderer *hwr, SoftwareRenderer *swr) {
 	ImGui::Begin("Settings");
 
 	ImGui::ColorEdit3("Background color", settings.bg_temp, ImGuiColorEditFlags_NoInputs);
@@ -445,18 +456,26 @@ Renderer *render_settings_window(GLFWwindow *window, HardwareRenderer *hwr, Soft
 		settings.hardware_rendering = false;
 	#endif
 
-	Renderer *renderer;
-	if (settings.hardware_rendering) {
-		renderer = hwr;
-	} else {
-		renderer = swr;
+	if (settings.hardware_rendering != settings.last_hardware_rendering) {
+		s32 width, height;
+		glfwGetFramebufferSize(window, &width, &height);
+
+		if (settings.hardware_rendering) {
+			swr->deinit();
+			hwr->reinit(width, height);
+			renderer = hwr;
+		} else {
+			hwr->deinit();
+			swr->reinit(width, height);
+			renderer = swr;
+		}
+
+		settings.last_hardware_rendering = settings.hardware_rendering;
 	}
 
 	glfwSetWindowUserPointer(window, renderer);
 
-	s32 width, height;
-	glfwGetFramebufferSize(renderer->window, &width, &height);
-	renderer->query_settings(width, height);
+	renderer->query_settings();
 
 	ImGui::End();
 
@@ -509,6 +528,8 @@ void load_settings_file_or_set_default() {
 	color_set_rgb_from_hex(settings.type_temp, settings.colors[COLOR_TYPE]);
 	color_set_rgb_from_hex(settings.comment_temp, settings.colors[COLOR_COMMENT]);
 	color_set_rgb_from_hex(settings.selection_temp, settings.colors[COLOR_SELECTION]);
+
+	settings.last_hardware_rendering = settings.hardware_rendering;
 }
 
 void save_settings() {
@@ -538,6 +559,7 @@ int main() {
 #ifdef _WIN32
 	glewInit();
 #endif
+	CHECK_OPENGL_ERROR();
 
 	GlyphMap *glyph_map;
 	DrawBuffer draw_buffer;
@@ -561,7 +583,9 @@ int main() {
 
 	s32 width, height;
 	glfwGetFramebufferSize(window, &width, &height);
-	renderer->query_settings(width, height);
+	renderer->reinit(width, height);
+
+	renderer->query_settings();
 
 	glClearColor(0.0, 0.0, 0.0, 1.0);
 
@@ -576,7 +600,10 @@ int main() {
 		frames++;
 		if (delta >= 1) {
 			char title[128];
-			sprintf(title, "Shin: '%s' %d FPS, %f ms/f\n", current_buffer->file_path, frames, (delta * 1000)/frames);
+
+			const char *render_mode = (settings.hardware_rendering) ? "GPU" : "CPU";
+			
+			sprintf(title, "Shin [%s]: '%s' %d FPS, %f ms/f\n", render_mode, current_buffer->file_path, frames, (delta * 1000)/frames);
 			glfwSetWindowTitle(window, title);
 
 			frames = 0;
@@ -597,7 +624,7 @@ int main() {
         	ImGui_ImplGlfw_NewFrame();
         	ImGui::NewFrame();
 
-			renderer = render_settings_window(window, &hardware_renderer, &software_renderer);
+			renderer = render_settings_window(window, renderer, &hardware_renderer, &software_renderer);
 
 			ImGui::Render();
 			ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
