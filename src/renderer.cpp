@@ -225,7 +225,7 @@ const char* software_renderer_fragment_shader = R"(
     uniform sampler2D texture1;
     void main()
     {
-        out_color = texture(texture1, out_tex_coords);
+        out_color = vec4(texture(texture1, out_tex_coords).rgb, 1.0);
     }
 )";
 
@@ -354,7 +354,7 @@ void SoftwareRenderer::render_cell(Cell *cell, u32 column, u32 row) {
 			pixel_rgb[1] = (glyph_alpha * fg[1]) + (1.0 - glyph_alpha) * bg[1];
 			pixel_rgb[2] = (glyph_alpha * fg[2]) + (1.0 - glyph_alpha) * bg[2];
 
-			u32 pixel = (0xFFu << 24) | color_hex_from_rgb(pixel_rgb);
+			u32 pixel = color_hex_from_rgb(pixel_rgb);
 
 			screen[(xoff + x) + (yoff + y) * width] = pixel;
 		}
