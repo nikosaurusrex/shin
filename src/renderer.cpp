@@ -204,7 +204,7 @@ void HardwareRenderer::update_time(f64 time) {
 
 
 const char* software_renderer_vertex_shader = R"(
-    #version 430 core
+    #version 410 core
     layout (location = 0) in vec2 in_pos;
     layout (location = 1) in vec2 in_tex_coords;
     out vec2 out_tex_coords;
@@ -216,7 +216,7 @@ const char* software_renderer_vertex_shader = R"(
 )";
 
 const char* software_renderer_fragment_shader = R"(
-    #version 430 core
+    #version 410 core
     in vec2 out_tex_coords;
     out vec4 out_color;
     uniform sampler2D texture1;
@@ -334,6 +334,9 @@ void SoftwareRenderer::render_cell(Cell *cell, u32 column, u32 row) {
 
 	f32 fg[3];
 	color_set_rgb_from_hex(fg, fg_hex);
+	f32 temp = fg[0];
+	fg[0] = fg[2];
+	fg[2] = temp;
 
 	f32 bg[3];
 	color_set_rgb_from_hex(bg, bg_hex);
