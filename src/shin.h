@@ -9,6 +9,12 @@
 #define ALT   (1 << 9)
 #define SHIFT (1 << 10)
 
+#define GLYPH_MAP_COUNT_X 32
+#define GLYPH_MAP_COUNT_Y 16
+
+#define GLYPH_INVERT 0x1
+#define GLYPH_BLINK 0x2
+
 enum Mode {
 	MODE_INSERT = 0,
 	MODE_NORMAL,
@@ -110,9 +116,53 @@ struct Settings {
 	f32 selection_temp[3];
 };
 
+struct FontMetrics {
+	s32 descender;
+	s32 glyph_width;
+	s32 glyph_height;
+}; 
+
+struct GlyphMap {
+	FontMetrics metrics;
+	u8 *data;
+	u32 width;
+	u32 height;
+};
+
+struct Cell {
+	u32 glyph_index;
+	u32 glyph_flags;
+	u32 foreground;
+	u32 background;
+};
+
+struct DrawBuffer {
+	Cell *cells;
+	u64 cells_size;
+	u32 rows;
+	u32 columns;
+};
+
+struct GLFWwindow;
+struct Renderer {
+	GlyphMap *glyph_map;
+	GLFWwindow *window;
+	DrawBuffer buffer;
+
+	s32 shader_glyph_map_slot;
+	s32 shader_cells_ssbo;
+	s32 shader_cell_size_slot;
+	s32 shader_grid_size_slot;
+	s32 shader_win_size_slot;
+	s32 shader_time_slot;
+	s32 shader_background_color_slot;
+};
+
 // common functions
 void read_file_to_buffer(Buffer *buffer);
 void write_buffer_to_file(Buffer *buffer);
+char *read_entire_file(const char *file_path);
+u32 color_hex_from_rgb(f32 rgb[3]);
 
 // buffer functions
 Buffer *buffer_create(u32 size);
@@ -162,12 +212,23 @@ void command_confirm();
 void command_exit();
 void command_insert_char();
 void command_delete();
-
 u32 command_get_cursor();
 char command_buffer_get(u32 i);
 
-// highlighting
+// highlighting functions
 void highlighting_parse(Pane *pane);
+
+// glyph map functions
+void glyph_map_init();
+GlyphMap *glyph_map_create(const char *font, u32 pixel_size);
+
+// renderer functions
+
+void renderer_init(Renderer *renderer, GLFWwindow *window);
+void renderer_query_cell_data(Renderer *renderer);
+void renderer_query_settings(Renderer *renderer, s32 width, s32 height);
+void renderer_update_time(Renderer *renderer, f64 time);
+void renderer_end(Renderer *renderer);
 
 /* TODO: Clean up globals */
 extern Buffer *current_buffer;

@@ -11,61 +11,12 @@
 #endif
 
 #include <glfw/glfw3.h>
-#include <ft2build.h>
-#include FT_FREETYPE_H
 
 #include "../extern/imgui/imgui.h"
 #include "../extern/imgui/imgui_impl_glfw.h"
 #include "../extern/imgui/imgui_impl_opengl3.h"
 
-#define GLYPH_MAP_COUNT_X 32
-#define GLYPH_MAP_COUNT_Y 16
-
-#define GLYPH_INVERT 0x1
-#define GLYPH_BLINK 0x2
-
 #define MAX_LINE_LENGTH 256
-
-struct FontMetrics {
-	s32 descender;
-	s32 glyph_width;
-	s32 glyph_height;
-}; 
-
-struct GlyphMap {
-	FontMetrics metrics;
-	u8 *data;
-	u32 width;
-	u32 height;
-};
-
-struct Cell {
-	u32 glyph_index;
-	u32 glyph_flags;
-	u32 foreground;
-	u32 background;
-};
-
-struct DrawBuffer {
-	Cell *cells;
-	u64 cells_size;
-	u32 rows;
-	u32 columns;
-};
-
-struct Renderer {
-	GlyphMap *glyph_map;
-	GLFWwindow *window;
-	DrawBuffer buffer;
-
-	GLint shader_glyph_map_slot;
-	GLint shader_cells_ssbo;
-	GLint shader_cell_size_slot;
-	GLint shader_grid_size_slot;
-	GLint shader_win_size_slot;
-	GLint shader_time_slot;
-	GLint shader_background_color_slot;
-};
 
 /* TODO: Clean up globals */
 Buffer *current_buffer;
@@ -149,72 +100,6 @@ void color_set_rgb_from_hex(f32 rgb[3], u32 hex) {
 
 u32 color_invert(u32 c) {
 	return 0xFFFFFFFF - c;
-}
-
-FontMetrics font_metrics_get(FT_Face face) {
-	FontMetrics metrics = {0};
-
-	FT_Load_Char(face, 'M', FT_RENDER_MODE_NORMAL);
-	metrics.descender = -face->size->metrics.descender >> 6;
-	metrics.glyph_width = face->glyph->advance.x >> 6;
-	metrics.glyph_height = (face->size->metrics.ascender >> 6) + metrics.descender;
-
-	return metrics;
-}
-
-GlyphMap *glyph_map_create(FT_Library ft, const char *font, u32 pixel_size) {
-	FT_Face face;
-	FT_New_Face(ft, font, 0, &face);
-	FT_Set_Pixel_Sizes(face, 0, pixel_size);
-
-	FontMetrics metrics = font_metrics_get(face);
-
-	GlyphMap *map = (GlyphMap *) malloc(sizeof(GlyphMap));
-
-	map->metrics = metrics;
-	map->width = metrics.glyph_width * GLYPH_MAP_COUNT_X;
-	map->height = metrics.glyph_height * GLYPH_MAP_COUNT_Y;
-
-	map->data = (u8 *) malloc(map->width * map->height);
-	memset(map->data, 0, map->width * map->height);
-
-	u32 chars_count = ('~' - ' ') + 1;
-
-	for (u32 i = 0; i < chars_count; ++i) {
-		u32 code = ' ' + i;
-		FT_UInt glyph_index = FT_Get_Char_Index(face, code);
-		FT_GlyphSlot glyph = face->glyph;
-
-		FT_Load_Glyph(face, glyph_index, FT_LOAD_RENDER);
-		FT_Render_Glyph(glyph, FT_RENDER_MODE_NORMAL);
-
-		FT_Bitmap bitmap = glyph->bitmap;
-		s32 left = glyph->bitmap_left;
-		s32 top = (metrics.glyph_height - metrics.descender) - glyph->bitmap_top;
-
-		if (top < 0) {
-			top = 0;
-		}
-
-		s32 tile_x = i % GLYPH_MAP_COUNT_X;
-		s32 tile_y = i / GLYPH_MAP_COUNT_X;
-
-		s32 start_x = tile_x * metrics.glyph_width + left;
-		s32 start_y = tile_y * metrics.glyph_height + top;
-
-		for (s32 pixel_y = 0; pixel_y < bitmap.rows; ++pixel_y) {
-			for (s32 pixel_x = 0; pixel_x < bitmap.width; ++pixel_x) {
-				u8 color = bitmap.buffer[pixel_x + pixel_y * bitmap.width];
-
-				s32 x = start_x + pixel_x;
-				s32 y = start_y + pixel_y;
-
-				map->data[x + y * map->width] = color;
-			}
-		}
-	}
-
-	return map;
 }
 
 void key_callback(GLFWwindow* window, s32 key, s32 scancode, s32 action, s32 mods) {
@@ -334,120 +219,6 @@ GLFWwindow *window_create(Renderer *renderer, u32 width, u32 height) {
 	return window;
 }
 
-GLuint shader_load(char *code, GLenum type) {
-	GLuint shader = glCreateShader(type);
-	glShaderSource(shader, 1, &code, 0);
-	glCompileShader(shader);
-
-	GLint compiled;
-	glGetShaderiv(shader, GL_COMPILE_STATUS, &compiled);
-
-	if (compiled == GL_FALSE) {
-		GLint length;
-		glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &length);
-		char *log = (char *) malloc(length);
-		glGetShaderInfoLog(shader, length, 0, log);
-		printf("%s\n", log);
-	}
-
-	return shader;
-}
-
-void shaders_init(Renderer *renderer) {
-	char *vertex_code = read_entire_file("resources/vert.glsl");
-	char *fragment_code = read_entire_file("resources/frag.glsl");
-
-	if (!vertex_code) {
-		puts("Failed to read resources/vert.glsl!");
-		exit(1);
-	}
-	
-	if (!fragment_code) {
-		puts("Failed to read resources/frag.glsl!");
-		exit(1);
-	}
-
-	GLuint vertex_shader = shader_load(vertex_code, GL_VERTEX_SHADER);
-	GLuint fragment_shader = shader_load(fragment_code, GL_FRAGMENT_SHADER);
-
-	GLuint program = glCreateProgram();
-	glAttachShader(program, vertex_shader);
-	glAttachShader(program, fragment_shader);
-	glLinkProgram(program);
-
-	glDeleteShader(vertex_shader);
-	glDeleteShader(fragment_shader);
-
-	glUseProgram(program);
-
-	renderer->shader_glyph_map_slot = glGetUniformLocation(program, "glyph_map");
-	renderer->shader_cell_size_slot = glGetUniformLocation(program, "cell_size");
-	renderer->shader_grid_size_slot = glGetUniformLocation(program, "grid_size");
-	renderer->shader_win_size_slot = glGetUniformLocation(program, "win_size");
-	renderer->shader_time_slot = glGetUniformLocation(program, "time");
-	renderer->shader_background_color_slot = glGetUniformLocation(program, "background_color");
-}
-
-void create_glyph_texture(GLint uniform_slot) {
-	GLuint tex;
-
-	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-
-	glGenTextures(1, &tex);
-	glUniform1i(uniform_slot, 0);
-	glActiveTexture(GL_TEXTURE0);
-	glBindTexture(GL_TEXTURE_2D, tex);
-
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-}
-
-u32 create_cells_ssbo() {
-	GLuint ssbo;
-
-	glGenBuffers(1, &ssbo);
-	glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo);
-	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, ssbo);
-
-	return ssbo;
-}
-
-void glyph_map_update_texture(GlyphMap *glyph_map) {
-	glActiveTexture(GL_TEXTURE0);
-
-	glTexImage2D(
-		GL_TEXTURE_2D,
-		0,
-		GL_RED,
-		glyph_map->width,
-		glyph_map->height,
-		0,
-		GL_RED,
-		GL_UNSIGNED_BYTE,
-		glyph_map->data	
-	);
-}
-
-bool checkOpenGLError() {
-    bool found_error = false;
-    int glErr = glGetError();
-    while (glErr != GL_NO_ERROR) {
-        printf("glError: %d\n", glErr);
-        found_error = true;
-        glErr = glGetError();
-    }
-    return found_error;
-}
-
-void query_cell_data(Renderer *renderer) {
-	DrawBuffer *buffer = &renderer->buffer;
-
-	checkOpenGLError();
-	glBufferData(GL_SHADER_STORAGE_BUFFER, buffer->cells_size, buffer->cells, GL_DYNAMIC_DRAW);
-}
-
 void draw_buffer_resize(Renderer *renderer) {
 	s32 width, height;
 	glfwGetFramebufferSize(renderer->window, &width, &height);
@@ -466,11 +237,7 @@ void draw_buffer_resize(Renderer *renderer) {
 	bounds->width = buffer->columns;
 	bounds->height = buffer->rows - 1;
 
-	glUniform2ui(renderer->shader_cell_size_slot, metrics.glyph_width, metrics.glyph_height);
-	glUniform2ui(renderer->shader_grid_size_slot, buffer->columns, buffer->rows);
-	glUniform2ui(renderer->shader_win_size_slot, width, height);
-
-	glUniform1ui(renderer->shader_background_color_slot, color_hex_from_rgb(settings.bg_temp));
+	renderer_query_settings(renderer, width, height);
 
 	glfwSwapInterval(settings.vsync ? 1 : 0);
 	glfwSetWindowOpacity(renderer->window, settings.opacity);
@@ -483,45 +250,7 @@ void draw_buffer_init(Renderer *renderer) {
 	memset(buffer->cells, 0, buffer->cells_size);
 }
 
-void renderer_init(Renderer *renderer, GLFWwindow *window) {
-	renderer->window = window;
-
-	shaders_init(renderer);
-
-	f32 vertices[12] = {
-		-1.0, -1.0,
-		-1.0, 1.0,
-		1.0, -1.0,
-		-1.0, 1.0,
-		1.0, 1.0,
-		1.0, -1.0
-	};
-
-	GLuint vao;
-	glGenVertexArrays(1, &vao);
-	glBindVertexArray(vao);
-
-	GLuint vbo;
-	glGenBuffers(1, &vbo);
-	glBindBuffer(GL_ARRAY_BUFFER, vbo);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-
-	glVertexAttribPointer(0, 2, GL_FLOAT, 0, 0, 0);
-	glEnableVertexAttribArray(0);
-}
-
-void renderer_init_glyph_map(FT_Library ft, Renderer *renderer) {
-	renderer->glyph_map = glyph_map_create(ft, "resources/consolas.ttf", 20);
-
-	create_glyph_texture(renderer->shader_glyph_map_slot);
-	renderer->shader_cells_ssbo = create_cells_ssbo();
-
-	glyph_map_update_texture(renderer->glyph_map);
-	query_cell_data(renderer);
-}
-
-void renderer_render_pane(Renderer *renderer, Pane *pane, bool is_active_pane) {
-	DrawBuffer *draw_buffer = &renderer->buffer;
+void render_pane(DrawBuffer *draw_buffer, Pane *pane, bool is_active_pane) {
 	Buffer *buffer = pane->buffer;
 	Bounds bounds = pane->bounds;
 
@@ -664,8 +393,7 @@ void renderer_render_pane(Renderer *renderer, Pane *pane, bool is_active_pane) {
 	}
 }
 
-void renderer_render(Renderer *renderer) {
-	DrawBuffer *draw_buffer = &renderer->buffer;
+void render(DrawBuffer *draw_buffer) {
 
 	memset(draw_buffer->cells, 0, draw_buffer->cells_size);
 
@@ -675,7 +403,7 @@ void renderer_render(Renderer *renderer) {
 
 	for (u32 i = 0; i < pane_count; ++i) {
 		Pane *pane = &pane_pool[i];
-		renderer_render_pane(renderer, pane, i == active_pane_index);
+		render_pane(draw_buffer, pane, i == active_pane_index);
 	}
 
 	// command textbox
@@ -691,12 +419,6 @@ void renderer_render(Renderer *renderer) {
 		}
 		draw_buffer->cells[start + command_get_cursor()].glyph_flags |= GLYPH_INVERT;
 	}
-}
-
-void renderer_end(GLFWwindow *window) {
-	glClear(GL_COLOR_BUFFER_BIT);
-
-	glDrawArrays(GL_TRIANGLES, 0, 6);
 }
 
 void render_settings_window(Renderer *renderer, GLFWwindow *window) {
@@ -724,7 +446,9 @@ void render_settings_window(Renderer *renderer, GLFWwindow *window) {
 	settings.colors[COLOR_COMMENT] = color_hex_from_rgb(settings.comment_temp);
 	settings.colors[COLOR_SELECTION] = color_hex_from_rgb(settings.selection_temp);
 
-	glUniform1ui(renderer->shader_background_color_slot, color_hex_from_rgb(settings.bg_temp));
+	s32 width, height;
+	glfwGetFramebufferSize(renderer->window, &width, &height);
+	renderer_query_settings(renderer, width, height);
 
 	glfwSwapInterval(settings.vsync ? 1 : 0);
 	glfwSetWindowOpacity(window, settings.opacity);
@@ -793,11 +517,9 @@ int main() {
 	current_buffer = buffer_create(32);
 	pane_create({0, 0, 30, 20}, current_buffer);
 
-	FT_Library ft;
-	FT_Init_FreeType(&ft);
-
-	Renderer renderer = {0};
+	glyph_map_init();
 	
+	Renderer renderer = {0};
 	GLFWwindow *window = window_create(&renderer, 1280, 720);
 
 #ifdef _WIN32
@@ -805,7 +527,6 @@ int main() {
 #endif
 
 	renderer_init(&renderer, window);
-	renderer_init_glyph_map(ft, &renderer);
 	draw_buffer_init(&renderer);
 
 	glClearColor(0.0, 0.0, 0.0, 1.0);
@@ -829,12 +550,14 @@ int main() {
 			prev_time = current_time;
 		}
 		
+		renderer_update_time(&renderer, current_time);
 		glUniform1f(renderer.shader_time_slot, current_time);
 
 		/* TODO: think about order of these calls */
-		renderer_render(&renderer);
-		query_cell_data(&renderer);
-		renderer_end(window);
+		render(&renderer.buffer);
+
+		renderer_query_cell_data(&renderer);
+		renderer_end(&renderer);
 		
 		if (settings.show) {
 			ImGui_ImplOpenGL3_NewFrame();
