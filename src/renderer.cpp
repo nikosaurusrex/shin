@@ -12,6 +12,9 @@
 
 #include <glfw/glfw3.h>
 
+#include <vector>
+#include <thread>
+
 const f32 quad_vertices[8] = {
 	-1.0f, -1.0f,
 	1.0f, -1.0f,
@@ -258,7 +261,7 @@ void SoftwareRenderer::reinit(s32 width, s32 height) {
 }
 
 void SoftwareRenderer::deinit() {
-    free(screen);
+    free((void *) screen);
     screen = 0;
     
 	glDeleteVertexArrays(1, &vao);
@@ -273,7 +276,7 @@ void SoftwareRenderer::resize(s32 width, s32 height) {
     this->height = height;
 
     if (screen) {
-        free(screen);
+        free((void *) screen);
         screen = 0;
     }
 
@@ -284,20 +287,41 @@ void SoftwareRenderer::end() {
     glClear(GL_COLOR_BUFFER_BIT);
 
 	for (u32 i = 0; i < width * height; ++i) {
-		screen[i] = (0xFFu << 24) | settings.colors[COLOR_BG];
+		screen[i] = settings.colors[COLOR_BG];
 	}
 
-	for (u32 row = 0; row < buffer->rows; ++row) {
-		for (u32 column = 0; column < buffer->columns; ++column) {
-			Cell *cell = &buffer->cells[column + row * buffer->columns];
+    std::vector<std::thread> threads;
+	std::atomic<s32> row_index;
+	row_index = 0;
 
-			if (cell->glyph_flags != 0 || cell->glyph_index != 0) {
-				render_cell(cell, column, row);
+    auto loop = [&]() {
+        while (row_index < buffer->rows) {
+			u32 row = row_index++;
+
+			if (row >= buffer->rows) break;
+
+			for (u32 column = 0; column < buffer->columns; ++column) {
+				Cell *cell = &buffer->cells[column + row * buffer->columns];
+
+				if (cell->glyph_flags != 0 || cell->glyph_index != 0) {
+					render_cell(cell, column, row);
+				}
 			}
-		}
-	}
+        }
+    };
 
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, screen);
+	u32 cores = 4;
+    for (u32 i = 0; i < cores; ++i) {
+        std::thread t(loop);
+
+        threads.push_back(move(t));
+    }
+
+    for (auto &t : threads) {
+        t.join();
+    }
+
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, (void *) screen);
 
 	glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 }

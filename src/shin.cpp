@@ -222,6 +222,7 @@ GLFWwindow *window_create(u32 width, u32 height) {
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO(); (void)io;
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+	io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
 
     ImGui::StyleColorsDark();
 
@@ -439,6 +440,8 @@ Renderer *render_settings_window(GLFWwindow *window, Renderer *renderer, Hardwar
 	ImGui::ColorEdit3("Comment color", settings.comment_temp, ImGuiColorEditFlags_NoInputs);
 	ImGui::ColorEdit3("Selection color", settings.selection_temp, ImGuiColorEditFlags_NoInputs);
 	ImGui::DragFloat("Opacity", &settings.opacity, 0.05f, 0.1f, 1.0f);
+	ImGui::DragInt("Tab width", (s32 *) &settings.tab_width, 1, 1, 16);
+	ImGui::DragInt("Font size", (s32 *) &settings.font_size, 1, 1, 60);
 	ImGui::Checkbox("Vsync", &settings.vsync);
 	ImGui::Checkbox("Hardware Rendering", &settings.hardware_rendering);
 
@@ -497,6 +500,7 @@ void set_default_settings() {
 	settings.colors[COLOR_SELECTION] = 0xf07a8e;
 
 	settings.tab_width = 4;
+	settings.font_size = 20;
 	settings.opacity = 1.0f;
 	
 	settings.vsync = true;
@@ -513,6 +517,7 @@ void load_settings_file_or_set_default() {
 	if (f) {
 		fread(settings.colors, sizeof(u32), COLOR_COUNT, f);
 		fread(&settings.tab_width, sizeof(u32), 1, f);
+		fread(&settings.font_size, sizeof(u32), 1, f);
 		fread(&settings.opacity, sizeof(f32), 1, f);
 		fread(&settings.vsync, sizeof(bool), 1, f);
 		fread(&settings.hardware_rendering, sizeof(bool), 1, f);
@@ -543,6 +548,7 @@ void save_settings() {
 
 	fwrite(settings.colors, sizeof(u32), COLOR_COUNT, f);
 	fwrite(&settings.tab_width, sizeof(u32), 1, f);
+	fwrite(&settings.font_size, sizeof(u32), 1, f);
 	fwrite(&settings.opacity, sizeof(f32), 1, f);
 	fwrite(&settings.vsync, sizeof(bool), 1, f);
 	fwrite(&settings.hardware_rendering, sizeof(bool), 1, f);
@@ -577,7 +583,7 @@ int main() {
 	}
 
 	glyph_map_init();
-	glyph_map = glyph_map_create("resources/consolas.ttf", 20);
+	glyph_map = glyph_map_create("resources/consolas.ttf", settings.font_size);
 	draw_buffer_init(&draw_buffer);
 	draw_buffer_resize(&draw_buffer, window, glyph_map);
 

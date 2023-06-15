@@ -99,6 +99,7 @@ enum ColorPalette : u32 {
 struct Settings {
 	u32 colors[COLOR_COUNT];
 	u32 tab_width;
+	u32 font_size;
     f32 opacity;
 	bool vsync;
 	bool hardware_rendering;
@@ -185,7 +186,7 @@ struct HardwareRenderer : Renderer {
 };
 
 struct SoftwareRenderer : Renderer {
-	u32 *screen = 0;
+	volatile u32 *screen = 0;
 	s32 width;
 	s32 height;
 
