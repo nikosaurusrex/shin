@@ -37,7 +37,7 @@ all: $(EXEC)
 
 .PHONY: clean
 clean:
-	rm -f $(EXEC) imgui.ini $(OBJ_FILES)
+	rm -f $(EXEC) imgui.ini $(OBJ_FILES) $(DEP_FILES)
 
 $(BUILD_DIR)/%.o: $(IMGUI_DIR)/%.cpp
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
