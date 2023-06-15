@@ -1,0 +1,5 @@
+build/**
+.vscode/**
+test.txt
+glyph_map.png
+config
