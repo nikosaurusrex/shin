@@ -108,8 +108,10 @@ static u32 create_cells_ssbo() {
 	GLuint ssbo;
 
 	glGenBuffers(1, &ssbo);
+#ifdef _WIN32
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo);
 	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, ssbo);
+#endif
 
 	return ssbo;
 }
@@ -184,8 +186,9 @@ void HardwareRenderer::end() {
 }
 
 void HardwareRenderer::query_cell_data() {
-	CHECK_OPENGL_ERROR();
+#ifdef _WIN32
 	glBufferData(GL_SHADER_STORAGE_BUFFER, buffer->cells_size, buffer->cells, GL_DYNAMIC_DRAW);
+#endif
 }
 
 void HardwareRenderer::query_settings() {

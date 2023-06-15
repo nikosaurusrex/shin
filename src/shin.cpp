@@ -226,7 +226,7 @@ GLFWwindow *window_create(u32 width, u32 height) {
     ImGui::StyleColorsDark();
 
     ImGui_ImplGlfw_InitForOpenGL(window, true);
-	const char* glsl_version = "#version 430 core";
+	const char* glsl_version = "#version 410 core";
     ImGui_ImplOpenGL3_Init(glsl_version);
 
 	return window;
@@ -273,7 +273,7 @@ void render_pane(DrawBuffer *draw_buffer, Pane *pane, bool is_active_pane) {
 	u32 render_cursor = pane->start;
 
 	char line_number_buffer[MAX_NUMBER_LENGTH];
-	itoa(pane->line_start + bounds.height - 1, line_number_buffer, 10);
+	snprintf(line_number_buffer, sizeof(line_number_buffer), "%d", pane->line_start + bounds.height - 1);
 	u32 max_line_number_length = strlen(line_number_buffer);
 
 	for (pos = start; pos < buffer_length(buffer) && lines_drawn < bounds.height - 1; pos = cursor_next(buffer, pos)) {
@@ -288,7 +288,7 @@ void render_pane(DrawBuffer *draw_buffer, Pane *pane, bool is_active_pane) {
 		u32 render_y = bounds.top + lines_drawn;
 
 		// display line number 
-		itoa(pane->line_start + lines_drawn + 1, line_number_buffer, 10);
+		snprintf(line_number_buffer, sizeof(line_number_buffer), "%d", pane->line_start + lines_drawn + 1);
 		u32 line_number_length = strlen(line_number_buffer);
 
 		u32 line_number_offset = max_line_number_length - line_number_length;

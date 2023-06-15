@@ -16,9 +16,8 @@ else
 		LIBS += `pkg-config --static --libs freetype2`
 
 		CXXFLAGS = $(INCLUDES)
-		LDFLAGS = $(GLFW_LIBS) -framework OpenGL -framework Cocoa -framework IOKit
 		EXEC = build/shin
-		LDFLAGS = $(LIBS)
+		LDFLAGS = $(LIBS) -framework OpenGL -framework Cocoa -framework IOKit
 	endif
 endif
 
