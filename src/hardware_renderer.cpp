@@ -31,7 +31,7 @@ static GLuint shader_load(char *code, GLenum type) {
 	return shader;
 }
 
-static void shaders_init(Renderer *renderer) {
+static void shaders_init(HardwareRenderer *renderer) {
 	char *vertex_code = read_entire_file("resources/vert.glsl");
 	char *fragment_code = read_entire_file("resources/frag.glsl");
 
@@ -119,19 +119,19 @@ static bool checkOpenGLError() {
     return found_error;
 }
 
-static void renderer_init_glyph_map(Renderer *renderer) {
-	renderer->glyph_map = glyph_map_create("resources/consolas.ttf", 20);
-
+static void renderer_init_glyph_map(HardwareRenderer *renderer) {
 	create_glyph_texture(renderer->shader_glyph_map_slot);
 	renderer->shader_cells_ssbo = create_cells_ssbo();
 
 	glyph_map_update_texture(renderer->glyph_map);
 }
 
-void renderer_init(Renderer *renderer, GLFWwindow *window) {
-	renderer->window = window;
+void HardwareRenderer::init(GLFWwindow *window, DrawBuffer *draw_buffer, GlyphMap *glyph_map) {
+	this->window = window;
+	this->buffer = draw_buffer;
+	this->glyph_map = glyph_map;
 
-	shaders_init(renderer);
+	shaders_init(this);
 
 	f32 vertices[12] = {
 		-1.0, -1.0,
@@ -154,31 +154,31 @@ void renderer_init(Renderer *renderer, GLFWwindow *window) {
 	glVertexAttribPointer(0, 2, GL_FLOAT, 0, 0, 0);
 	glEnableVertexAttribArray(0);
 	
-	renderer_init_glyph_map(renderer);
+	renderer_init_glyph_map(this);
 }
 
-void renderer_query_cell_data(Renderer *renderer) {
-	DrawBuffer *buffer = &renderer->buffer;
-
+void HardwareRenderer::query_cell_data() {
 	checkOpenGLError();
 	glBufferData(GL_SHADER_STORAGE_BUFFER, buffer->cells_size, buffer->cells, GL_DYNAMIC_DRAW);
 }
 
-void renderer_query_settings(Renderer *renderer, s32 width, s32 height) {
-    DrawBuffer *buffer = &renderer->buffer;
-	FontMetrics metrics = renderer->glyph_map->metrics;
+void HardwareRenderer::query_settings(s32 width, s32 height) {
+	FontMetrics metrics = glyph_map->metrics;
 
-	glUniform2ui(renderer->shader_cell_size_slot, metrics.glyph_width, metrics.glyph_height);
-	glUniform2ui(renderer->shader_grid_size_slot, buffer->columns, buffer->rows);
-	glUniform2ui(renderer->shader_win_size_slot, width, height);
-	glUniform1ui(renderer->shader_background_color_slot, color_hex_from_rgb(settings.bg_temp));
+	glUniform2ui(shader_cell_size_slot, metrics.glyph_width, metrics.glyph_height);
+	glUniform2ui(shader_grid_size_slot, buffer->columns, buffer->rows);
+	glUniform2ui(shader_win_size_slot, width, height);
+	glUniform1ui(shader_background_color_slot, color_hex_from_rgb(settings.bg_temp));
+	
+	glfwSwapInterval(settings.vsync ? 1 : 0);
+	glfwSetWindowOpacity(window, settings.opacity);
 }
 
-void renderer_update_time(Renderer *renderer, f64 time) {
-    glUniform1f(renderer->shader_time_slot, time);
+void HardwareRenderer::update_time(f64 time) {
+    glUniform1f(shader_time_slot, time);
 }
 
-void renderer_end(Renderer *renderer) {
+void HardwareRenderer::end() {
 	glClear(GL_COLOR_BUFFER_BIT);
 
 	glDrawArrays(GL_TRIANGLES, 0, 6);

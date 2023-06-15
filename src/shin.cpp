@@ -172,13 +172,13 @@ void character_callback(GLFWwindow* window, u32 key) {
 	keymap_dispatch_event(keymap, last_input_event);
 }
 
-void draw_buffer_resize(Renderer *renderer);
+void draw_buffer_resize(DrawBuffer *draw_buffer, GLFWwindow *window, GlyphMap *glyph_map);
 void window_resize(GLFWwindow *window, s32 width, s32 height) {
 	Renderer *renderer = (Renderer *) glfwGetWindowUserPointer(window);
-	draw_buffer_resize(renderer);
+	draw_buffer_resize(renderer->buffer, renderer->window, renderer->glyph_map);
 }
 
-GLFWwindow *window_create(Renderer *renderer, u32 width, u32 height) {
+GLFWwindow *window_create(u32 width, u32 height) {
 	glfwInit();
 
 	glfwDefaultWindowHints();
@@ -195,7 +195,6 @@ GLFWwindow *window_create(Renderer *renderer, u32 width, u32 height) {
 
 	GLFWwindow *window = glfwCreateWindow(width, height, "Shin", 0, 0);
 
-	glfwSetWindowUserPointer(window, renderer);
 	glfwSetFramebufferSizeCallback(window, window_resize);
 	glfwSetKeyCallback(window, key_callback);
 	glfwSetCharCallback(window, character_callback);
@@ -219,12 +218,11 @@ GLFWwindow *window_create(Renderer *renderer, u32 width, u32 height) {
 	return window;
 }
 
-void draw_buffer_resize(Renderer *renderer) {
+void draw_buffer_resize(DrawBuffer *buffer, GLFWwindow *window, GlyphMap *glyph_map) {
 	s32 width, height;
-	glfwGetFramebufferSize(renderer->window, &width, &height);
+	glfwGetFramebufferSize(window, &width, &height);
 
-	DrawBuffer *buffer = &renderer->buffer;
-	FontMetrics metrics = renderer->glyph_map->metrics;
+	FontMetrics metrics = glyph_map->metrics;
 
 	buffer->columns = floor((f32)width / metrics.glyph_width);
 	buffer->rows = floor((f32)height / metrics.glyph_height);
@@ -236,17 +234,10 @@ void draw_buffer_resize(Renderer *renderer) {
 	bounds->top = 0;
 	bounds->width = buffer->columns;
 	bounds->height = buffer->rows - 1;
-
-	renderer_query_settings(renderer, width, height);
-
-	glfwSwapInterval(settings.vsync ? 1 : 0);
-	glfwSetWindowOpacity(renderer->window, settings.opacity);
 }
 
-void draw_buffer_init(Renderer *renderer) {
-	DrawBuffer *buffer = &renderer->buffer;
+void draw_buffer_init(DrawBuffer *buffer) {
 	buffer->cells = (Cell *) malloc(buffer->cells_size);
-	draw_buffer_resize(renderer);
 	memset(buffer->cells, 0, buffer->cells_size);
 }
 
@@ -421,7 +412,7 @@ void render(DrawBuffer *draw_buffer) {
 	}
 }
 
-void render_settings_window(Renderer *renderer, GLFWwindow *window) {
+Renderer *render_settings_window(GLFWwindow *window, HardwareRenderer *hwr, SoftwareRenderer *swr) {
 	ImGui::Begin("Settings");
 
 	ImGui::ColorEdit3("Background color", settings.bg_temp, ImGuiColorEditFlags_NoInputs);
@@ -433,8 +424,9 @@ void render_settings_window(Renderer *renderer, GLFWwindow *window) {
 	ImGui::ColorEdit3("Type color", settings.type_temp, ImGuiColorEditFlags_NoInputs);
 	ImGui::ColorEdit3("Comment color", settings.comment_temp, ImGuiColorEditFlags_NoInputs);
 	ImGui::ColorEdit3("Selection color", settings.selection_temp, ImGuiColorEditFlags_NoInputs);
-	ImGui::Checkbox("Vsync", &settings.vsync);
 	ImGui::DragFloat("Opacity", &settings.opacity, 0.05f, 0.1f, 1.0f);
+	ImGui::Checkbox("Vsync", &settings.vsync);
+	ImGui::Checkbox("Hardware Rendering", &settings.hardware_rendering);
 
 	settings.colors[COLOR_BG] = color_hex_from_rgb(settings.bg_temp);
 	settings.colors[COLOR_FG] = color_hex_from_rgb(settings.fg_temp);
@@ -446,14 +438,29 @@ void render_settings_window(Renderer *renderer, GLFWwindow *window) {
 	settings.colors[COLOR_COMMENT] = color_hex_from_rgb(settings.comment_temp);
 	settings.colors[COLOR_SELECTION] = color_hex_from_rgb(settings.selection_temp);
 
-	s32 width, height;
-	glfwGetFramebufferSize(renderer->window, &width, &height);
-	renderer_query_settings(renderer, width, height);
-
 	glfwSwapInterval(settings.vsync ? 1 : 0);
 	glfwSetWindowOpacity(window, settings.opacity);
 
+	#ifdef __APPLE__
+		settings.hardware_rendering = false;
+	#endif
+
+	Renderer *renderer;
+	if (settings.hardware_rendering) {
+		renderer = hwr;
+	} else {
+		renderer = swr;
+	}
+
+	glfwSetWindowUserPointer(window, renderer);
+
+	s32 width, height;
+	glfwGetFramebufferSize(renderer->window, &width, &height);
+	renderer->query_settings(width, height);
+
 	ImGui::End();
+
+	return renderer;
 }
 
 void set_default_settings() {
@@ -467,18 +474,26 @@ void set_default_settings() {
 	settings.colors[COLOR_COMMENT] = 0xE6E249;
 	settings.colors[COLOR_SELECTION] = 0xf07a8e;
 
-	settings.vsync = true;
 	settings.tab_width = 4;
 	settings.opacity = 1.0f;
+	
+	settings.vsync = true;
+	
+#ifdef __APPLE__
+	settings.hardware_rendering = false;
+#else
+	settings.hardware_rendering	= true;
+#endif
 }
 
 void load_settings_file_or_set_default() {
 	FILE *f = fopen("config", "rb");
 	if (f) {
 		fread(settings.colors, sizeof(u32), COLOR_COUNT, f);
-		fread(&settings.vsync, sizeof(bool), 1, f);
 		fread(&settings.tab_width, sizeof(u32), 1, f);
 		fread(&settings.opacity, sizeof(f32), 1, f);
+		fread(&settings.vsync, sizeof(bool), 1, f);
+		fread(&settings.hardware_rendering, sizeof(bool), 1, f);
 
 		fclose(f);
 	} else {
@@ -503,9 +518,10 @@ void save_settings() {
 	}
 
 	fwrite(settings.colors, sizeof(u32), COLOR_COUNT, f);
-	fwrite(&settings.vsync, sizeof(bool), 1, f);
 	fwrite(&settings.tab_width, sizeof(u32), 1, f);
 	fwrite(&settings.opacity, sizeof(f32), 1, f);
+	fwrite(&settings.vsync, sizeof(bool), 1, f);
+	fwrite(&settings.hardware_rendering, sizeof(bool), 1, f);
 
 	fclose(f);
 }
@@ -516,18 +532,36 @@ int main() {
 
 	current_buffer = buffer_create(32);
 	pane_create({0, 0, 30, 20}, current_buffer);
-
-	glyph_map_init();
 	
-	Renderer renderer = {0};
-	GLFWwindow *window = window_create(&renderer, 1280, 720);
+	GLFWwindow *window = window_create(1280, 720);
 
 #ifdef _WIN32
 	glewInit();
 #endif
 
-	renderer_init(&renderer, window);
-	draw_buffer_init(&renderer);
+	GlyphMap *glyph_map;
+	DrawBuffer draw_buffer;
+
+	HardwareRenderer hardware_renderer;
+	SoftwareRenderer software_renderer;
+	Renderer *renderer;
+	if (settings.hardware_rendering) {
+		renderer = &hardware_renderer;
+	} else {
+		renderer = &software_renderer;
+	}
+
+	glyph_map_init();
+	glyph_map = glyph_map_create("resources/consolas.ttf", 20);
+	draw_buffer_init(&draw_buffer);
+	draw_buffer_resize(&draw_buffer, window, glyph_map);
+
+	hardware_renderer.init(window, &draw_buffer, glyph_map);
+	software_renderer.init(window, &draw_buffer, glyph_map);
+
+	s32 width, height;
+	glfwGetFramebufferSize(window, &width, &height);
+	renderer->query_settings(width, height);
 
 	glClearColor(0.0, 0.0, 0.0, 1.0);
 
@@ -550,21 +584,20 @@ int main() {
 			prev_time = current_time;
 		}
 		
-		renderer_update_time(&renderer, current_time);
-		glUniform1f(renderer.shader_time_slot, current_time);
+		renderer->update_time(current_time);
 
 		/* TODO: think about order of these calls */
-		render(&renderer.buffer);
+		render(renderer->buffer);
 
-		renderer_query_cell_data(&renderer);
-		renderer_end(&renderer);
+		renderer->query_cell_data();
+		renderer->end();
 		
 		if (settings.show) {
 			ImGui_ImplOpenGL3_NewFrame();
         	ImGui_ImplGlfw_NewFrame();
         	ImGui::NewFrame();
 
-			render_settings_window(&renderer, window);
+			renderer = render_settings_window(window, &hardware_renderer, &software_renderer);
 
 			ImGui::Render();
 			ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());

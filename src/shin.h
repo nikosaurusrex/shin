@@ -98,9 +98,10 @@ enum ColorPalette : u32 {
 
 struct Settings {
 	u32 colors[COLOR_COUNT];
-	bool vsync;
 	u32 tab_width;
     f32 opacity;
+	bool vsync;
+	bool hardware_rendering;
 
 	bool show;
 
@@ -145,10 +146,18 @@ struct DrawBuffer {
 
 struct GLFWwindow;
 struct Renderer {
-	GlyphMap *glyph_map;
 	GLFWwindow *window;
-	DrawBuffer buffer;
+	DrawBuffer *buffer;
+	GlyphMap *glyph_map;
 
+	virtual void init(GLFWwindow *window, DrawBuffer *draw_buffer, GlyphMap *gylph_map) = 0;
+	virtual void query_cell_data() = 0;
+	virtual void query_settings(s32 width, s32 height) = 0;
+	virtual void update_time(f64 time) = 0;
+	virtual void end() = 0;
+};
+
+struct HardwareRenderer : Renderer {
 	s32 shader_glyph_map_slot;
 	s32 shader_cells_ssbo;
 	s32 shader_cell_size_slot;
@@ -156,6 +165,20 @@ struct Renderer {
 	s32 shader_win_size_slot;
 	s32 shader_time_slot;
 	s32 shader_background_color_slot;
+
+	void init(GLFWwindow *window, DrawBuffer *draw_buffer, GlyphMap *gylph_map);
+	void query_cell_data();
+	void query_settings(s32 width, s32 height);
+	void update_time(f64 time);
+	void end();
+};
+
+struct SoftwareRenderer : Renderer {
+	void init(GLFWwindow *window, DrawBuffer *draw_buffer, GlyphMap *gylph_map);
+	void query_cell_data();
+	void query_settings(s32 width, s32 height);
+	void update_time(f64 time);
+	void end();
 };
 
 // common functions
@@ -221,14 +244,6 @@ void highlighting_parse(Pane *pane);
 // glyph map functions
 void glyph_map_init();
 GlyphMap *glyph_map_create(const char *font, u32 pixel_size);
-
-// renderer functions
-
-void renderer_init(Renderer *renderer, GLFWwindow *window);
-void renderer_query_cell_data(Renderer *renderer);
-void renderer_query_settings(Renderer *renderer, s32 width, s32 height);
-void renderer_update_time(Renderer *renderer, f64 time);
-void renderer_end(Renderer *renderer);
 
 /* TODO: Clean up globals */
 extern Buffer *current_buffer;
