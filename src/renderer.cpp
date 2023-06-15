@@ -12,8 +12,9 @@
 
 #include <glfw/glfw3.h>
 
-#include <vector>
+#include <atomic>
 #include <thread>
+#include <vector>
 
 const f32 quad_vertices[8] = {
 	-1.0f, -1.0f,
@@ -286,10 +287,6 @@ void SoftwareRenderer::resize(s32 width, s32 height) {
 void SoftwareRenderer::end() {
     glClear(GL_COLOR_BUFFER_BIT);
 
-	for (u32 i = 0; i < width * height; ++i) {
-		screen[i] = settings.colors[COLOR_BG];
-	}
-
     std::vector<std::thread> threads;
 	std::atomic<s32> row_index;
 	row_index = 0;
@@ -305,12 +302,25 @@ void SoftwareRenderer::end() {
 
 				if (cell->glyph_flags != 0 || cell->glyph_index != 0) {
 					render_cell(cell, column, row);
+				} else {
+					FontMetrics metrics = glyph_map->metrics;
+					u32 bg_color = settings.colors[COLOR_BG];
+					u32 gw = metrics.glyph_width;
+					u32 gh = metrics.glyph_height;
+
+					u32 xs = gw * column;
+					u32 ys = gh * row;
+					for (u32 y = ys; y < ys + gh; ++y) {
+						for (u32 x = xs; x < xs + gw; ++x) {
+							screen[x + y * width] = bg_color;
+						}
+					}
 				}
 			}
         }
     };
 
-	u32 cores = 4;
+	u32 cores = 8;
     for (u32 i = 0; i < cores; ++i) {
         std::thread t(loop);
 
@@ -374,6 +384,7 @@ void SoftwareRenderer::render_cell(Cell *cell, u32 column, u32 row) {
 			f32 glyph_alpha = (f32)(glyph_alpha_int) / 255.0f;
 
 			f32 pixel_rgb[3];
+			/* TODO: somehow optimise those four lines */
 			pixel_rgb[0] = (glyph_alpha * fg[0]) + (1.0 - glyph_alpha) * bg[0];
 			pixel_rgb[1] = (glyph_alpha * fg[1]) + (1.0 - glyph_alpha) * bg[1];
 			pixel_rgb[2] = (glyph_alpha * fg[2]) + (1.0 - glyph_alpha) * bg[2];
