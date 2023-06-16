@@ -7,8 +7,8 @@
 static char command_buffer[MAX_COMMAND_LENGTH];
 static u32 command_cursor = 0;
 
-void command_execute(char *command, char args[MAX_TOKENS][MAX_TOKEN_LENGTH], u32 args_count) {
-    Pane *active_pane = &pane_pool[active_pane_index];
+static void command_execute(Editor *ed, char *command, char args[MAX_TOKENS][MAX_TOKEN_LENGTH], u32 args_count) {
+    Pane *active_pane = &ed->pane_pool[ed->active_pane_index];
     Buffer *target_buffer = active_pane->buffer;
 
     /* TODO: rework with good system */
@@ -26,7 +26,7 @@ void command_execute(char *command, char args[MAX_TOKENS][MAX_TOKEN_LENGTH], u32
         }
         read_file_to_buffer(target_buffer);
     } else if (strcmp(command, "q") == 0) {
-        global_running = false;
+        ed->running = false;
     } else if (isdigit(command[0])) {
         u32 end = 0;
         while (isdigit(command[end])) {
@@ -49,7 +49,7 @@ void command_execute(char *command, char args[MAX_TOKENS][MAX_TOKEN_LENGTH], u32
      }
 }
 
-void command_parse_and_run() {
+static void command_parse_and_run(Editor *ed) {
     if (command_buffer[0] != ':') {
         return;
     }
@@ -89,31 +89,31 @@ void command_parse_and_run() {
     if (token_count > 0) {
         char *cmd = tokens[0];
 
-        command_execute(cmd, tokens + 1, token_count - 1);
+        command_execute(ed, cmd, tokens + 1, token_count - 1);
     }
 }
 
-void begin_command() {
-    current_buffer->mode = MODE_COMMAND;
+void command_begin(Editor *ed) {
+    ed->current_buffer->mode = MODE_COMMAND;
     command_buffer[0] = ':';
     command_cursor = 1;
 }
 
-void command_confirm() {
-	command_parse_and_run();
+void command_confirm(Editor *ed) {
+	command_parse_and_run(ed);
     command_cursor = 0;
 
-    current_buffer->mode = MODE_NORMAL;
+    ed->current_buffer->mode = MODE_NORMAL;
 }
 
-void command_exit() {
+void command_exit(Editor *ed) {
     command_cursor = 0;
 
-    current_buffer->mode = MODE_NORMAL;
+    ed->current_buffer->mode = MODE_NORMAL;
 }
 
-void command_insert_char() {
-    command_buffer[command_cursor] = last_input_event.ch;
+void command_insert_char(InputEvent input_event) {
+    command_buffer[command_cursor] = input_event.ch;
     command_cursor++;
     if (command_cursor >= MAX_COMMAND_LENGTH) {
         command_cursor = MAX_COMMAND_LENGTH - 1;

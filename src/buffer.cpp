@@ -356,19 +356,19 @@ u32 cursor_get_prev_word(Buffer *buffer, u32 cursor) {
 	return cursor;
 }
 
-Pane *pane_create(Bounds bounds, Buffer *buffer) {
-	Pane *pane = &pane_pool[pane_count];
+Pane *pane_create(Editor *ed, Bounds bounds) {
+	Pane *pane = &ed->pane_pool[ed->pane_count];
 
 	pane->bounds = bounds;
-	pane->buffer = buffer;
+	pane->buffer = buffer_create(32);
 	pane->start = 0;
 	pane->end = UINT32_MAX;
 	pane->line_start = 0;
 
-	active_pane_index = pane_count;
-	current_buffer = buffer;
+	ed->active_pane_index = ed->pane_count;
+	ed->current_buffer = pane->buffer;
 
-	pane_count++;
+	ed->pane_count++;
 	return pane;
 }
 
@@ -426,8 +426,8 @@ void pane_update_scroll(Pane *pane) {
 	pane->end = end;
 }
 
-void pane_split_vertically() {
-	Pane *pane = &pane_pool[active_pane_index];
+void pane_split_vertically(Editor *ed) {
+	Pane *pane = &ed->pane_pool[ed->active_pane_index];
 
 	Bounds *left_bounds = &pane->bounds;
 	u32 left_width = left_bounds->width / 2;
@@ -438,13 +438,13 @@ void pane_split_vertically() {
 	right_bounds.width = left_bounds->width - left_width;
 	right_bounds.height = left_bounds->height;
 
-	pane_create(right_bounds, buffer_create(32));
+	pane_create(ed, right_bounds);
 	
 	left_bounds->width = left_width;
 }
 
-void pane_split_horizontally() {
-	Pane *pane = &pane_pool[active_pane_index];
+void pane_split_horizontally(Editor *ed) {
+	Pane *pane = &ed->pane_pool[ed->active_pane_index];
 
 	Bounds *top_bounds = &pane->bounds;
 	u32 top_height = top_bounds->height / 2;
@@ -455,7 +455,7 @@ void pane_split_horizontally() {
 	bot_bounds.width = top_bounds->width;
 	bot_bounds.height = top_bounds->height - top_height;
 
-	pane_create(bot_bounds, buffer_create(32));
+	pane_create(ed, bot_bounds);
 	
 	top_bounds->height = top_height;
 }

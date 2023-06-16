@@ -195,11 +195,11 @@ void HardwareRenderer::query_cell_data() {
 #endif
 }
 
-void HardwareRenderer::query_settings() {
-	glUniform1ui(shader_background_color_slot, color_hex_from_rgb(settings.bg_temp));
+void HardwareRenderer::query_settings(Settings *settings) {
+	glUniform1ui(shader_background_color_slot, color_hex_from_rgb(settings->bg_temp));
 	
-	glfwSwapInterval(settings.vsync ? 1 : 0);
-	glfwSetWindowOpacity(window, settings.opacity);
+	glfwSwapInterval(settings->vsync ? 1 : 0);
+	glfwSetWindowOpacity(window, settings->opacity);
 }
 
 void HardwareRenderer::update_time(f64 time) {
@@ -304,7 +304,6 @@ void SoftwareRenderer::end() {
 					render_cell(cell, column, row);
 				} else {
 					FontMetrics metrics = glyph_map->metrics;
-					u32 bg_color = settings.colors[COLOR_BG];
 					u32 gw = metrics.glyph_width;
 					u32 gh = metrics.glyph_height;
 
@@ -339,9 +338,10 @@ void SoftwareRenderer::end() {
 void SoftwareRenderer::query_cell_data() {
 }
 
-void SoftwareRenderer::query_settings() {
-	glfwSwapInterval(settings.vsync ? 1 : 0);
-	glfwSetWindowOpacity(window, settings.opacity);
+void SoftwareRenderer::query_settings(Settings *settings) {
+	glfwSwapInterval(settings->vsync ? 1 : 0);
+	glfwSetWindowOpacity(window, settings->opacity);
+	bg_color = settings->colors[COLOR_BG];
 }
 
 void SoftwareRenderer::update_time(f64 time) {

@@ -3,69 +3,82 @@
 #include <glfw/glfw3.h>
 
 #define SHORTCUT(name) \
-	void shortcut_fn_##name(); \
+	void shortcut_fn_##name(Editor *ed); \
 	Shortcut shortcut_##name = {#name, shortcut_fn_##name}; \
-	void shortcut_fn_##name()
+	void shortcut_fn_##name(Editor *ed)
 
 #define MAX_NORMAL_LENGTH 16
 static char normal_buffer[MAX_NORMAL_LENGTH];
 static u32 normal_index = 0;
 
-bool normal_mode_get_shortcut(Shortcut *shortcut);
+bool normal_mode_get_shortcut(Editor *ed, Shortcut *shortcut);
 
 SHORTCUT(null) {
 	
 }
 
 SHORTCUT(insert_char) {
-	buffer_insert(current_buffer, current_buffer->cursor, last_input_event.ch);
+	Buffer *buffer = ed->current_buffer;
+	InputEvent input_event = ed->last_input_event;
+
+	buffer_insert(buffer, buffer->cursor, input_event.ch);
 }
 
 SHORTCUT(delete_forwards) {
-	buffer_delete_forwards(current_buffer, current_buffer->cursor);
+	Buffer *buffer = ed->current_buffer;
+	buffer_delete_forwards(buffer, buffer->cursor);
 }
 
 SHORTCUT(delete_backwards) {
-	buffer_delete_backwards(current_buffer, current_buffer->cursor);
+	Buffer *buffer = ed->current_buffer;
+	buffer_delete_backwards(buffer, buffer->cursor);
 }
 	
 SHORTCUT(cursor_back) {
-	current_buffer->cursor = cursor_back(current_buffer, current_buffer->cursor);
+	Buffer *buffer = ed->current_buffer;
+	buffer->cursor = cursor_back(buffer, buffer->cursor);
 }
 
 SHORTCUT(cursor_next) {
-	current_buffer->cursor = cursor_next(current_buffer, current_buffer->cursor);
+	Buffer *buffer = ed->current_buffer;
+	buffer->cursor = cursor_next(buffer, buffer->cursor);
 }
 
 SHORTCUT(insert_new_line) {
-	buffer_insert(current_buffer, current_buffer->cursor, '\n');
+	Buffer *buffer = ed->current_buffer;
+	buffer_insert(buffer, buffer->cursor, '\n');
 }
 
 SHORTCUT(insert_tab) {
-	buffer_insert(current_buffer, current_buffer->cursor, '\t');
+	Buffer *buffer = ed->current_buffer;
+	buffer_insert(buffer, buffer->cursor, '\t');
 }
 
 SHORTCUT(goto_beginning_of_line) {
-	current_buffer->cursor = cursor_get_beginning_of_line(current_buffer, current_buffer->cursor);
-	current_buffer->mode = MODE_INSERT;
+	Buffer *buffer = ed->current_buffer;
+	buffer->cursor = cursor_get_beginning_of_line(buffer, buffer->cursor);
+	buffer->mode = MODE_INSERT;
 }
 
 SHORTCUT(goto_end_of_line) {
-	current_buffer->cursor = cursor_get_end_of_line(current_buffer, current_buffer->cursor);
-	current_buffer->mode = MODE_INSERT;
+	Buffer *buffer = ed->current_buffer;
+	buffer->cursor = cursor_get_end_of_line(buffer, buffer->cursor);
+	buffer->mode = MODE_INSERT;
 }
 
 SHORTCUT(insert_mode) {
-	current_buffer->mode = MODE_INSERT;
+	Buffer *buffer = ed->current_buffer;
+	buffer->mode = MODE_INSERT;
 }
 
 SHORTCUT(insert_mode_next) {
-	current_buffer->mode = MODE_INSERT;
-	current_buffer->cursor = cursor_next(current_buffer, current_buffer->cursor);
+	Buffer *buffer = ed->current_buffer;
+	buffer->mode = MODE_INSERT;
+	buffer->cursor = cursor_next(buffer, buffer->cursor);
 }
 
 SHORTCUT(next_line) {
-	Buffer *buffer = current_buffer;
+	Buffer *buffer = ed->current_buffer;
 	u32 column = cursor_get_column(buffer, buffer->cursor);
 	u32 beginning_of_next_line = cursor_get_beginning_of_next_line(buffer, buffer->cursor);
 	u32 next_line_length = buffer_line_length(buffer, beginning_of_next_line);
@@ -74,7 +87,7 @@ SHORTCUT(next_line) {
 }
 
 SHORTCUT(prev_line) {
-	Buffer *buffer = current_buffer;
+	Buffer *buffer = ed->current_buffer;
 	u32 column = cursor_get_column(buffer, buffer->cursor);
 	u32 beginning_of_prev_line = cursor_get_beginning_of_prev_line(buffer, buffer->cursor);
 	u32 prev_line_length = buffer_line_length(buffer, beginning_of_prev_line);
@@ -83,12 +96,12 @@ SHORTCUT(prev_line) {
 }
  
 SHORTCUT(go_word_next) {
-	Buffer *buffer = current_buffer;
+	Buffer *buffer = ed->current_buffer;
 	buffer->cursor = cursor_get_next_word(buffer, buffer->cursor);
 }
 
 SHORTCUT(go_word_end) {
-	Buffer *buffer = current_buffer;
+	Buffer *buffer = ed->current_buffer;
 	
 	if (isspace(buffer_get_char(buffer, buffer->cursor))) {
 		buffer->cursor = cursor_get_next_word(buffer, buffer->cursor);
@@ -101,7 +114,7 @@ SHORTCUT(go_word_end) {
 }	
 
 SHORTCUT(go_word_prev) {
-	Buffer *buffer = current_buffer;
+	Buffer *buffer = ed->current_buffer;
 
 	if (isspace(buffer_get_char(buffer, buffer->cursor))) {
 		buffer->cursor = cursor_get_prev_word(buffer, buffer->cursor);
@@ -115,58 +128,67 @@ SHORTCUT(go_word_prev) {
 	
 
 SHORTCUT(goto_buffer_begin) {
-	current_buffer->cursor = 0;
+	Buffer *buffer = ed->current_buffer;
+	buffer->cursor = 0;
 }
 
 SHORTCUT(goto_buffer_end) {
-	current_buffer->cursor = buffer_length(current_buffer);
+	Buffer *buffer = ed->current_buffer;
+	buffer->cursor = buffer_length(buffer);
 }
 
 SHORTCUT(new_line_before) {
-	shortcut_fn_goto_beginning_of_line();
-	shortcut_fn_insert_new_line();
+	Buffer *buffer = ed->current_buffer;
+	shortcut_fn_goto_beginning_of_line(ed);
+	shortcut_fn_insert_new_line(ed);
 	
-	current_buffer->cursor = cursor_get_end_of_prev_line(current_buffer, current_buffer->cursor);
+	buffer->cursor = cursor_get_end_of_prev_line(buffer, buffer->cursor);
 }
 
 SHORTCUT(new_line_after) {
-	shortcut_fn_goto_end_of_line();
-	shortcut_fn_insert_new_line();
+	Buffer *buffer = ed->current_buffer;
+	shortcut_fn_goto_end_of_line(ed);
+	shortcut_fn_insert_new_line(ed);
 }
 
 SHORTCUT(next_pane) {
-	active_pane_index++;
-	if (active_pane_index >= pane_count) {
-		active_pane_index = 0;
+	Buffer *buffer = ed->current_buffer;
+	ed->active_pane_index++;
+	if (ed->active_pane_index >= ed->pane_count) {
+		ed->active_pane_index = 0;
 	}
 
-	current_buffer = pane_pool[active_pane_index].buffer;
-	current_buffer->mode = MODE_NORMAL;
+	ed->current_buffer = ed->pane_pool[ed->active_pane_index].buffer;
+	ed->current_buffer->mode = MODE_NORMAL;
 }
 
 SHORTCUT(prev_pane) {
-	active_pane_index++;
-	if (active_pane_index >= pane_count) {
-		active_pane_index = 0;
+	Buffer *buffer = ed->current_buffer;
+	ed->active_pane_index++;
+	if (ed->active_pane_index >= ed->pane_count) {
+		ed->active_pane_index = 0;
 	}
 
-	current_buffer = pane_pool[active_pane_index].buffer;
-	current_buffer->mode = MODE_NORMAL;
+	ed->current_buffer = ed->pane_pool[ed->active_pane_index].buffer;
+	ed->current_buffer->mode = MODE_NORMAL;
 }
 
 SHORTCUT(split_vertically) {
-	pane_split_vertically();
-	current_buffer->mode = MODE_NORMAL;
+	Buffer *buffer = ed->current_buffer;
+	pane_split_vertically(ed);
+	buffer->mode = MODE_NORMAL;
 }
 
 SHORTCUT(split_horizontally) {
-	pane_split_horizontally();
-	current_buffer->mode = MODE_NORMAL;
+	Buffer *buffer = ed->current_buffer;
+	pane_split_horizontally(ed);
+	buffer->mode = MODE_NORMAL;
 }
 
 SHORTCUT(normal_mode) {
-	current_buffer->cursor_width = 0;
-	current_buffer->mode = MODE_NORMAL;
+	Buffer *buffer = ed->current_buffer;
+	buffer->cursor_width = 0;
+	buffer->mode = MODE_NORMAL;
 	normal_index = 0;
 	normal_buffer[normal_index] = 0;
 }
@@ -181,8 +203,9 @@ SHORTCUT(normal_insert) {
 		return;
 	}
 
-	char ch = last_input_event.ch;
-	u16 key_comb = last_input_event.key_comb;
+	InputEvent input_event = ed->last_input_event;
+	char ch = input_event.ch;
+	u16 key_comb = input_event.key_comb;
 
 	if (key_comb & CTRL) {
 		normal_buffer[normal_index++] = '^';
@@ -195,28 +218,29 @@ SHORTCUT(normal_insert) {
 	normal_buffer[normal_index] = 0;
 
 	Shortcut shortcut;
-	bool exists = normal_mode_get_shortcut(&shortcut);
+	bool exists = normal_mode_get_shortcut(ed, &shortcut);
 	if (exists) {
-		shortcut.function();
-		shortcut_fn_normal_mode_clear();
+		shortcut.function(ed);
+		shortcut_fn_normal_mode_clear(ed);
 	}
 }
 
 SHORTCUT(show_settings) {
-	settings.show = !settings.show;
+	ed->settings.show = !ed->settings.show;
 }
 
 SHORTCUT(quit) {
-	global_running = false;
+	ed->running = false;
 }
 
 SHORTCUT(visual_mode) {
-	current_buffer->mode = MODE_VISUAL;
-	current_buffer->cursor_width = 0;
+	Buffer *buffer = ed->current_buffer;
+	buffer->mode = MODE_VISUAL;
+	buffer->cursor_width = 0;
 }
 
 SHORTCUT(visual_mode_line) {
-	Buffer *buffer = current_buffer;
+	Buffer *buffer = ed->current_buffer;
 
 	buffer->mode = MODE_VISUAL;
 
@@ -226,46 +250,42 @@ SHORTCUT(visual_mode_line) {
 }
 
 SHORTCUT(visual_next) {
-	if (current_buffer->cursor + current_buffer->cursor_width < buffer_length(current_buffer)) {
-		current_buffer->cursor_width++;
+	Buffer *buffer = ed->current_buffer;
+	if (buffer->cursor + buffer->cursor_width < buffer_length(buffer)) {
+		buffer->cursor_width++;
 	}
 }
 
 SHORTCUT(visual_back) {
-	if (current_buffer->cursor + current_buffer->cursor_width > 0) {
-		current_buffer->cursor_width--;
+	Buffer *buffer = ed->current_buffer;
+	if (buffer->cursor + buffer->cursor_width > 0) {
+		buffer->cursor_width--;
 	}
 }
 
 SHORTCUT(visual_next_line) {
-	Buffer *buffer = current_buffer;
+	Buffer *buffer = ed->current_buffer;
 
 	u32 cursor = (s32)(buffer->cursor) + buffer->cursor_width;
 	u32 column = cursor_get_column(buffer, cursor);
-	u32 beginning_of_next_line = cursor_get_beginning_of_next_line(buffer, cursor);
-	u32 next_line_length = buffer_line_length(buffer, beginning_of_next_line);
-
-	u32 end = beginning_of_next_line + MIN(next_line_length, column);
+	u32 end = cursor_get_end_of_next_line(buffer, cursor);
 
 	buffer->cursor_width += end - cursor;
 }
 
 SHORTCUT(visual_prev_line) {
-	Buffer *buffer = current_buffer;
+	Buffer *buffer = ed->current_buffer;
 
 	u32 cursor = (s32)(buffer->cursor) + buffer->cursor_width;
 
 	u32 column = cursor_get_column(buffer, cursor);
-	u32 beginning_of_prev_line = cursor_get_beginning_of_prev_line(buffer, cursor);
-	u32 prev_line_length = buffer_line_length(buffer, beginning_of_prev_line);
-
-	u32 end = beginning_of_prev_line + MIN(prev_line_length, column);
+	u32 end = cursor_get_beginning_of_prev_line(buffer, cursor);
 
 	buffer->cursor_width -= cursor - end;
 }
  
 SHORTCUT(visual_word_next) {
-	Buffer *buffer = current_buffer;
+	Buffer *buffer = ed->current_buffer;
 	u32 cursor = (s32)(buffer->cursor) + buffer->cursor_width;
 	u32 end = cursor_get_next_word(buffer, cursor);
 
@@ -273,7 +293,7 @@ SHORTCUT(visual_word_next) {
 }
 
 SHORTCUT(visual_word_end) {
-	Buffer *buffer = current_buffer;
+	Buffer *buffer = ed->current_buffer;
 	u32 cursor = (s32)(buffer->cursor) + buffer->cursor_width;
 	
 	u32 end;
@@ -290,7 +310,7 @@ SHORTCUT(visual_word_end) {
 }	
 
 SHORTCUT(visual_word_prev) {
-	Buffer *buffer = current_buffer;
+	Buffer *buffer = ed->current_buffer;
 	u32 cursor = (s32)(buffer->cursor) + buffer->cursor_width;
 
 	u32 end;
@@ -306,27 +326,43 @@ SHORTCUT(visual_word_prev) {
 	buffer->cursor_width -= cursor - end;
 }
 
+SHORTCUT(visual_buffer_beginning) {
+	Buffer *buffer = ed->current_buffer;
+	u32 cursor = (s32)(buffer->cursor) + buffer->cursor_width;
+
+	buffer->cursor_width -= cursor;
+}
+
+SHORTCUT(visual_buffer_end) {
+	Buffer *buffer = ed->current_buffer;
+	u32 cursor = (s32)(buffer->cursor) + buffer->cursor_width;
+
+	u32 end = buffer_length(buffer);
+
+	buffer->cursor_width += end - cursor;
+}
+
 SHORTCUT(visual_delete) {
-	Buffer *buffer = current_buffer;
+	Buffer *buffer = ed->current_buffer;
 	buffer_delete_multiple(buffer, buffer->cursor, buffer->cursor_width + 1);
 	buffer->mode = MODE_NORMAL;
 	buffer->cursor_width = 0;
 }
 
-SHORTCUT(begin_command) {
-    begin_command();
+SHORTCUT(command_begin) {
+    command_begin(ed);
 }
 
 SHORTCUT(command_confirm) {
-	command_confirm();
+	command_confirm(ed);
 }
 
 SHORTCUT(command_exit) {
-    command_exit();
+    command_exit(ed);
 }
 
 SHORTCUT(command_insert_char) {
-	command_insert_char();
+	command_insert_char(ed->last_input_event);
 }
 
 SHORTCUT(command_delete) {
@@ -350,15 +386,20 @@ Keymap *keymap_create_empty() {
 	return keymap;
 }
 
-void keymap_dispatch_event(Keymap *keymap, InputEvent event) {
+void keymap_dispatch_event(Editor *ed) {
+	InputEvent event = ed->last_input_event;
+	Keymap *keymap = ed->keymaps[ed->current_buffer->mode];
+
 	if (event.type == INPUT_EVENT_PRESSED) {
 		Shortcut *shortcut = keymap_get_shortcut(keymap, event.key_comb);
-		shortcut->function();
+		shortcut->function(ed);
 	}
 }
 
 /* TODO: definetly rework this! */
-bool normal_mode_get_shortcut(Shortcut *shortcut) {
+bool normal_mode_get_shortcut(Editor *ed, Shortcut *shortcut) {
+	Buffer *buffer = ed->current_buffer;
+
 	switch (normal_buffer[0]) {
 		// one letter shortcuts
 		case 'x': *shortcut = shortcut_delete_forwards; break;
@@ -398,37 +439,37 @@ bool normal_mode_get_shortcut(Shortcut *shortcut) {
 					char c2 = normal_buffer[1];
 
 					if (c1 == 'g' && c2 == 'g') {
-						shortcut_fn_goto_buffer_begin();
-						shortcut_fn_normal_mode_clear();
+						shortcut_fn_goto_buffer_begin(ed);
+						shortcut_fn_normal_mode_clear(ed);
 						return false;
 					} else if (c1 == 'd') {
 						if (c2 == 'd') {
-							u32 from = cursor_get_beginning_of_line(current_buffer, current_buffer->cursor);
-							u32 to = cursor_get_beginning_of_next_line(current_buffer, current_buffer->cursor);
+							u32 from = cursor_get_beginning_of_line(buffer, buffer->cursor);
+							u32 to = cursor_get_beginning_of_next_line(buffer, buffer->cursor);
 							
-							buffer_delete_multiple(current_buffer, from, (to - from));
+							buffer_delete_multiple(buffer, from, (to - from));
 
-							shortcut_fn_normal_mode_clear();
+							shortcut_fn_normal_mode_clear(ed);
 							return false;
 						} else if (c2 == 'w') {
-							u32 from = current_buffer->cursor;
-							u32 to = cursor_get_next_word(current_buffer, current_buffer->cursor);
+							u32 from = buffer->cursor;
+							u32 to = cursor_get_next_word(buffer, buffer->cursor);
 
-							buffer_delete_multiple(current_buffer, from, (to - from));
+							buffer_delete_multiple(buffer, from, (to - from));
 
-							shortcut_fn_normal_mode_clear();
+							shortcut_fn_normal_mode_clear(ed);
 							return false;
 						} else  {
 							return false;
 						}
 					} else if (c1 == 'c' && c2 == 'w') {
-						u32 from = current_buffer->cursor;
-						u32 to = cursor_get_end_of_word(current_buffer, current_buffer->cursor);
+						u32 from = buffer->cursor;
+						u32 to = cursor_get_end_of_word(buffer, buffer->cursor);
 
-						buffer_delete_multiple(current_buffer, from, (to - from) + 1);
+						buffer_delete_multiple(buffer, from, (to - from) + 1);
 
-						shortcut_fn_normal_mode_clear();
-						shortcut_fn_insert_mode(); 
+						shortcut_fn_normal_mode_clear(ed);
+						shortcut_fn_insert_mode(ed); 
 						return false;
 					} else {
 						return false;
@@ -452,15 +493,15 @@ bool normal_mode_get_shortcut(Shortcut *shortcut) {
 							char dir = normal_buffer[end];
 							if (dir == 'j') {
 								for (u32 i = 0; i < number; ++i) {
-									shortcut_fn_next_line();
+									shortcut_fn_next_line(ed);
 								}
 							} else if (dir == 'k') {
 								for (u32 i = 0; i < number; ++i) {
-									shortcut_fn_prev_line();
+									shortcut_fn_prev_line(ed);
 								}
 							}
 
-							shortcut_fn_normal_mode_clear();
+							shortcut_fn_normal_mode_clear(ed);
 						}
 					}
 
@@ -473,7 +514,7 @@ bool normal_mode_get_shortcut(Shortcut *shortcut) {
 	return true;
 }
 
-void create_default_keymaps() {
+void create_default_keymaps(Editor *ed) {
 	// insert keymap
 	Keymap *keymap = keymap_create_empty();
 
@@ -492,7 +533,7 @@ void create_default_keymaps() {
 	keymap->shortcuts[GLFW_KEY_F4 | ALT] = shortcut_quit;
 	keymap->shortcuts[GLFW_KEY_ESCAPE] = shortcut_normal_mode;
 
-	keymaps[MODE_INSERT] = keymap;
+	ed->keymaps[MODE_INSERT] = keymap;
 	
 	// normal keymap
 	keymap = keymap_create_empty();
@@ -504,10 +545,10 @@ void create_default_keymaps() {
 	}
 	keymap->shortcuts[GLFW_KEY_F4 | ALT] = shortcut_quit;
 	keymap->shortcuts[GLFW_KEY_F3] = shortcut_show_settings;
-	keymap->shortcuts[':' | SHIFT] = shortcut_begin_command;
+	keymap->shortcuts[':' | SHIFT] = shortcut_command_begin;
 	keymap->shortcuts[GLFW_KEY_ESCAPE] = shortcut_normal_mode_clear;
 
-	keymaps[MODE_NORMAL] = keymap;
+	ed->keymaps[MODE_NORMAL] = keymap;
 	
 	// command keymap
 	keymap = keymap_create_empty();
@@ -520,7 +561,7 @@ void create_default_keymaps() {
 	keymap->shortcuts[GLFW_KEY_ENTER] = shortcut_command_confirm;
 	keymap->shortcuts[GLFW_KEY_ESCAPE] = shortcut_command_exit;
 
-	keymaps[MODE_COMMAND] = keymap;
+	ed->keymaps[MODE_COMMAND] = keymap;
 
 	// visual keymap
 	keymap = keymap_create_empty();
@@ -533,7 +574,9 @@ void create_default_keymaps() {
 	keymap->shortcuts['E'] = shortcut_visual_word_end;
 	keymap->shortcuts['B'] = shortcut_visual_word_prev;
 	keymap->shortcuts['D'] = shortcut_visual_delete;
+	keymap->shortcuts['G'] = shortcut_visual_buffer_beginning;
+	keymap->shortcuts['G' | SHIFT] = shortcut_visual_buffer_end;
 	keymap->shortcuts[GLFW_KEY_ESCAPE] = shortcut_normal_mode;
 
-	keymaps[MODE_VISUAL] = keymap;
+	ed->keymaps[MODE_VISUAL] = keymap;
 }

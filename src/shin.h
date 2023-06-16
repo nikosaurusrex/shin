@@ -41,7 +41,8 @@ enum InputEventType {
 	INPUT_EVENT_RELEASED
 };
 
-typedef void (*ShortcutFunction)();
+struct Editor;
+typedef void (*ShortcutFunction)(Editor *ed);
 struct Shortcut {
 	const char *name;
 	ShortcutFunction function;
@@ -158,7 +159,7 @@ struct Renderer {
 	virtual void resize(s32 width, s32 height) = 0;
 	virtual void end() = 0;
 	virtual void query_cell_data() = 0;
-	virtual void query_settings() = 0;
+	virtual void query_settings(Settings *settings) = 0;
 	virtual void update_time(f64 time) = 0;
 };
 
@@ -181,7 +182,7 @@ struct HardwareRenderer : Renderer {
 	void resize(s32 width, s32 height);
 	void end();
 	void query_cell_data();
-	void query_settings();
+	void query_settings(Settings *settings);
 	void update_time(f64 time);
 };
 
@@ -189,6 +190,7 @@ struct SoftwareRenderer : Renderer {
 	volatile u32 *screen = 0;
 	s32 width;
 	s32 height;
+	u32 bg_color;
 
 	u32 vao;
 	u32 vbo;
@@ -201,10 +203,25 @@ struct SoftwareRenderer : Renderer {
 	void resize(s32 width, s32 height);
 	void end();
 	void query_cell_data();
-	void query_settings();
+	void query_settings(Settings *settings);
 	void update_time(f64 time);
 
 	void render_cell(Cell *cell, u32 column, u32 row);
+};
+
+struct Editor {
+	Renderer *renderer;
+	Buffer *current_buffer;
+	InputEvent last_input_event;
+
+	Pane pane_pool[MAX_PANES];
+	u32 pane_count;
+	u32 active_pane_index;
+
+	Keymap *keymaps[MODES_COUNT];
+
+	Settings settings;
+	bool running;
 };
 
 // common functions
@@ -250,21 +267,21 @@ u32 cursor_get_next_word(Buffer *buffer, u32 cursor);
 u32 cursor_get_prev_word(Buffer *buffer, u32 cursor);
 
 // pane functions
-Pane *pane_create(Bounds bounds, Buffer *buffer);
+Pane *pane_create(Editor *ed, Bounds bounds);
 void pane_update_scroll(Pane *pane);
-void pane_split_vertically();
-void pane_split_horizontally();
+void pane_split_vertically(Editor *ed);
+void pane_split_horizontally(Editor *ed);
 
 // keymap functions
 Keymap *keymap_create_empty();
-void keymap_dispatch_event(Keymap *keymap, InputEvent event);
-void create_default_keymaps();
+void keymap_dispatch_event(Editor *ed);
+void create_default_keymaps(Editor *ed);
 
 // commands functions
-void begin_command();
-void command_confirm();
-void command_exit();
-void command_insert_char();
+void command_begin(Editor *ed);
+void command_confirm(Editor *ed);
+void command_exit(Editor *ed);
+void command_insert_char(InputEvent input_event);
 void command_delete();
 u32 command_get_cursor();
 char command_buffer_get(u32 i);
@@ -275,16 +292,3 @@ void highlighting_parse(Pane *pane);
 // glyph map functions
 void glyph_map_init();
 GlyphMap *glyph_map_create(const char *font, u32 pixel_size);
-
-/* TODO: Clean up globals */
-extern Buffer *current_buffer;
-extern InputEvent last_input_event;
-
-extern Pane pane_pool[MAX_PANES];
-extern u32 pane_count;
-extern u32 active_pane_index;
-
-extern Keymap *keymaps[MODES_COUNT];
-
-extern Settings settings;
-extern bool global_running;

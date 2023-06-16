@@ -1,9 +1,6 @@
 cleanup globals
 implement more commands like goto-line, search, { }
-32j, 32k and so on...
 
 layout management
-changing font/colors
 
-line numbers
-selection
+copy with y and paste with p
