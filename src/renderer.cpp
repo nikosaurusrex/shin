@@ -68,7 +68,7 @@ static u32 shaders_compile(char *vertex_code, char *fragment_code) {
 
 static void shaders_init(HardwareRenderer *renderer) {
 	char *vertex_code = read_entire_file("resources/vert.glsl");
-	char *fragment_code = read_entire_file("resources/frag.glsl");
+	char *fragment_code = read_entire_file("resources/frag_macos.glsl");
 
 	if (!vertex_code) {
 		puts("Failed to read resources/vert.glsl!");
@@ -83,6 +83,7 @@ static void shaders_init(HardwareRenderer *renderer) {
 	renderer->program = shaders_compile(vertex_code, fragment_code);
 
 	renderer->shader_glyph_map_slot = glGetUniformLocation(renderer->program, "glyph_map");
+	renderer->shader_cells_slot = glGetUniformLocation(renderer->program, "cells");
 	renderer->shader_cell_size_slot = glGetUniformLocation(renderer->program, "cell_size");
 	renderer->shader_grid_size_slot = glGetUniformLocation(renderer->program, "grid_size");
 	renderer->shader_win_size_slot = glGetUniformLocation(renderer->program, "win_size");
@@ -90,14 +91,14 @@ static void shaders_init(HardwareRenderer *renderer) {
 	renderer->shader_background_color_slot = glGetUniformLocation(renderer->program, "background_color");
 }
 
-static u32 create_texture(GLint uniform_slot) {
+static u32 create_texture(GLint uniform_slot, GLint texture_slot) {
 	GLuint tex;
 
 	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 
 	glGenTextures(1, &tex);
-	glUniform1i(uniform_slot, 0);
-	glActiveTexture(GL_TEXTURE0);
+	glUniform1i(uniform_slot, texture_slot);
+	glActiveTexture(GL_TEXTURE0 + texture_slot);
 	glBindTexture(GL_TEXTURE_2D, tex);
 
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -137,8 +138,9 @@ static void glyph_map_update_texture(GlyphMap *glyph_map) {
 }
 
 static void renderer_init_glyph_map(HardwareRenderer *renderer) {
-	renderer->glyph_texture = create_texture(renderer->shader_glyph_map_slot);
-	renderer->shader_cells_ssbo = create_cells_ssbo();
+	renderer->glyph_texture = create_texture(renderer->shader_glyph_map_slot, 0);
+	renderer->glyph_texture = create_texture(renderer->shader_cells_slot, 1);
+	// renderer->shader_cells_ssbo = create_cells_ssbo();
 
 	glyph_map_update_texture(renderer->glyph_map);
 }
@@ -191,8 +193,11 @@ void HardwareRenderer::end() {
 
 void HardwareRenderer::query_cell_data() {
 #ifdef _WIN32
-	glBufferData(GL_SHADER_STORAGE_BUFFER, buffer->cells_size, buffer->cells, GL_DYNAMIC_DRAW);
+	// glBufferData(GL_SHADER_STORAGE_BUFFER, buffer->cells_size, buffer->cells, GL_DYNAMIC_DRAW);
 #endif
+	glActiveTexture(GL_TEXTURE1);
+
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, buffer->columns, buffer->rows, 0, GL_RGBA, GL_UNSIGNED_BYTE, buffer->cells);
 }
 
 void HardwareRenderer::query_settings(Settings *settings) {
@@ -257,7 +262,7 @@ void SoftwareRenderer::reinit(s32 width, s32 height) {
 	);
 
 	texture = create_texture(
-		glGetUniformLocation(program, "texture1")
+		glGetUniformLocation(program, "texture1"), 0
 	);
 }
 

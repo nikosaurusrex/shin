@@ -170,6 +170,7 @@ struct HardwareRenderer : Renderer {
 	u32 glyph_texture;
 
 	s32 shader_glyph_map_slot;
+	s32 shader_cells_slot;
 	u32 shader_cells_ssbo;
 	s32 shader_cell_size_slot;
 	s32 shader_grid_size_slot;

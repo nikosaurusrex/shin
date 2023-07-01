@@ -188,6 +188,7 @@ SHORTCUT(split_horizontally) {
 SHORTCUT(normal_mode) {
 	Buffer *buffer = ed->current_buffer;
 	buffer->cursor_width = 0;
+	buffer->cursor = cursor_back(buffer, buffer->cursor);
 	buffer->mode = MODE_NORMAL;
 	normal_index = 0;
 	normal_buffer[normal_index] = 0;
